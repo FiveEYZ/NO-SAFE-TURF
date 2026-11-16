@@ -57,4 +57,6 @@ DDL has implicit commit behavior. Apply migrations before enabling gameplay, not
 
 ## Verification status
 
-The Node backend passed nine integration cases on isolated MariaDB 11.4.5 on 2026-11-16: entity/item round trips, competing claims, changed-row writes, rollback, persistent data, wipe idempotence, failures around commit, overdue wipe and backup/hash/restore checks. The fixture was stopped afterward. No remote migration was attempted. Actual FiveM, physical power loss, deployment network/TLS and load behavior remain unverified.
+The Node backend passed 15 integration cases on isolated MariaDB 11.4.5 on 2026-11-16: entity/item round trips, competing claims, changed-row writes, rollback, persistent data, wipe idempotence, failures around commit, overdue wipe and backup/hash/restore checks. The fixture was stopped afterward. No remote migration was attempted. Actual FiveM, physical power loss, deployment network/TLS and load behavior remain unverified.
+
+Version 0.3 additionally requires a synced, read-back-verified filesystem archive before seasonal deletion. Initial metadata creation refuses occupied application tables in both bootstrap and explicit init paths. No schema version change or destructive migration was introduced.

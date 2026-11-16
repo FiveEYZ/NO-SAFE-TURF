@@ -22,12 +22,12 @@ async function main(){
   assert.equal((await retry.request('/state')).code,503);assert.equal((await retry.request('/state')).code,200);await retry.stop();
   const root=path.resolve(__dirname,'../resource');let exported,stop,command,scheduled=0;
   const context={require:name=>{
-    if(name.endsWith('mysql2/promise'))return {createPool:()=>({})};
+    if(name.endsWith('oxmysql.js'))return {createOxPool:()=>({})};
     if(name.endsWith('config.js'))return {readConfig:()=>({}),safeError:()=> 'Storage unavailable'};
     if(name.endsWith('store.js'))return {MariaDBStore:class{}};
     if(name.endsWith('bridge.js'))return {createBridge:()=>({request:async()=>({code:200,data:{revision:7}}),ready:async()=>{},stop:async()=>{}})};
     return require(name);
-  },GetCurrentResourceName:()=> 'no_safe_turf',GetResourcePath:()=>root,GetConvar:(_,d)=>d,GetConvarInt:(_,d)=>d,
+  },GetCurrentResourceName:()=> 'no_safe_turf',GetResourcePath:()=>root,GetConvar:(_,d)=>d,GetConvarInt:(n,d)=>n==='nst_db_configured'?1:d,
   exports:(name,fn)=>{assert.equal(name,'storageRequest');exported=fn;},RegisterCommand:(_,fn)=>{command=fn;},on:(_,fn)=>{stop=fn;},console,
   setImmediate:fn=>{scheduled++;setImmediate(fn);}};
   vm.runInNewContext(fs.readFileSync(path.join(root,'server/storage.js'),'utf8'),context);

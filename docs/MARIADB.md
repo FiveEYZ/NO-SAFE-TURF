@@ -1,46 +1,47 @@
-# txAdmin + MariaDB installation (0.2)
+# External MariaDB and manual installation
 
-For automated recipe installation without a separate private JSON or offline initialization command, see [TXADMIN_RECIPE.md](TXADMIN_RECIPE.md). The manual instructions below remain supported.
+## Connection and dependencies
 
-## Architecture
+The runtime path is Lua → local JavaScript storage → pinned oxmysql 2.14.3 → external MariaDB 10.11+. Existing transaction/revision logic is preserved. mysql2 3.14.1 remains bundled only for offline tools and disposable tests. No local database is an installation requirement. Never run two gameplay instances against the same database.
 
-Lua gameplay → local server export → FiveM JavaScript/Node 22 → MariaDB.
+Install the official [oxmysql 2.14.3 release](https://github.com/overextended/oxmysql/releases/tag/v2.14.3). Its manifest requires server build 12913 or newer and Node 22; choose a current Enhanced artifact, not a Legacy artifact merely meeting that number. [Official oxmysql documentation](https://overextended.dev/docs/oxmysql) recommends MariaDB. The adapter uses the pinned startTransaction API and waits for commit acknowledgement. Cfx cross-resource Promise behavior is still unverified.
 
-Python, oxmysql, separate storage services and HTTP tokens are not required. The manifest selects Node 22. See [Cfx JavaScript runtime documentation](https://docs.fivem.net/docs/scripting-manual/runtimes/javascript/) for embedded Node and main-thread callbacks. Actual Cfx interoperation still needs the two-client test.
+## Manual / existing-server installation
 
-## Prepare and install
+1. Stop the test resource. Preserve your existing server.cfg, keys, private connection files and backups. Follow UPGRADING.md before changing a server with player data.
+2. Copy resource/ to resources/[local]/no_safe_turf/ and database_config/ to resources/[local]/nst_database_config/. Keep manifest files directly inside those resource folders. Extract the pinned oxmysql resource to resources/[standalone]/oxmysql/.
+3. Copy deploy/mariadb.example.json to no_safe_turf/server/mariadb.private.json. Configure host, port, database, user and password privately. No file containing these values belongs in Git or the manifest file list. Use a dedicated database.
+4. From the extracted package on an administrator computer with Node 22+, run:
 
-1. Use a dedicated database on MariaDB 10.11 or newer, with a maintained patched release. Permit connections from the FiveM host. Runtime permissions: SELECT/INSERT/UPDATE/DELETE. Initialization additionally needs CREATE. Do not reuse unrelated application tables.
-2. Extract the release. Copy the contents of resource/ into resources/[local]/no_safe_turf/ under your txAdmin server data directory, including node_modules. fxmanifest.lua must be directly in no_safe_turf. For a source checkout, first run: npm ci --omit=dev --ignore-scripts --prefix resource.
-3. Copy deploy/mariadb.example.json to a private JSON file and set host, port, user, password and database. In this workspace, supplied credentials are already in deploy/mariadb.private.json. Transfer that file separately to no_safe_turf/server/mariadb.private.json. The release excludes credentials. Restrict access to the server account. Never add this file to manifest files/shared_scripts or expose it through a web server. Optional sslCa names a CA certificate relative to the JSON file; certificate and host verification remain enabled.
-4. From the extracted release directory on an administrator computer with Node 22+, run the commands below with the intended private configuration. Check is read-only; init creates tables and the initial season. Initialization has not been run against your database.
+    node tools/database.js check --config PATH_TO_PRIVATE_JSON
+    node tools/database.js init --config PATH_TO_PRIVATE_JSON
 
-    node tools/database.js check --config deploy/mariadb.private.json
-    node tools/database.js init --config deploy/mariadb.private.json
+Check is read-only. Init applies nst_* tables and initializes the first season only if metadata is absent and all application tables are empty. It never creates a database. This supports a pre-created database when the provider prohibits CREATE DATABASE. DDL is not fully transactional; after an installation error inspect the partial schema, do not drop/reset existing data.
+5. Merge deploy/txadmin-resource.cfg into your existing profile. Set nst_backup_directory to server-backups. Start order: nst_database_config, oxmysql, no_safe_turf (mapmanager/spawnmanager also required). Restart that sequence after changing connection settings.
+6. Run nst_db_status and nst_status, then the private two-client protocol. Do not start a competing economy/spawn/inventory framework.
 
-5. Merge deploy/txadmin-resource.cfg into the existing txAdmin server.cfg, preserving endpoints, license and administrator settings. Do not run competing economy/inventory/spawn frameworks.
-6. Start through txAdmin. Run nst_db_status in the server console, then nst_status. Complete TESTING.md with two private clients before using real player data.
+## txAdmin database permissions and constraints
 
-The SQL file alone creates tables; the init tool also creates the singleton season/deadline row. Startup verifies schema version and metadata. It does not automatically create the schema.
+The official recipe engine inspected on 2026-11-16 always issues CREATE DATABASE IF NOT EXISTS, even for a named existing database. The fresh recipe forces dbDelete=false and refuses an existing nst_* schema. [Engine source](https://github.com/citizenfx/txAdmin/blob/master/core/deployer/recipeEngine.js) is authoritative for this behavior.
 
-A saved deadline survives restart. Schedule convars affect later calculations; use matching --weekday, --hour and --minute initialization options when changing defaults. Monday=0; default Sunday=6 at 04:00 Europe/Stockholm.
+A provider that rejects CREATE DATABASE must use the manual path above and txAdmin's existing-server-data flow. The normal recipe cannot bypass the engine's database command. The inspected deployer connector also has no documented TLS-CA recipe input. If the provider requires custom-CA TLS during installation, use the offline tool/private JSON path rather than weakening verification.
 
-## Backup export and restore
+Installer: CREATE for this database's tables plus SELECT/INSERT/UPDATE/DELETE; the regular deployer may additionally need permission for its CREATE DATABASE command. Runtime: SELECT/INSERT/UPDATE/DELETE only. No DROP/ALTER permission is needed for v1 runtime operations. Tables explicitly use InnoDB and utf8mb4_bin even if txAdmin's database default differs. Existing incompatible schemas are not upgraded by IF NOT EXISTS.
 
-Every completed wipe creates a transactional pre-wipe backup. Find its ID in nst_backups (backup_id, created_at, revision) or the wipe result. Export to a new file:
+## Private configuration and TLS
 
-    node tools/database.js export --config deploy/mariadb.private.json --id BACKUP_ID --file season.backup.json
+Recipe installs pass the server-only nst_db_connection URL from txAdmin. Manual installs use private JSON when that convar is empty. The nst_database_config preloader validates and converts the URL before oxmysql starts. Never use setr or sets for secrets.
 
-With the resource stopped, restore into a new dedicated empty destination database:
+Pinned oxmysql's configuration parser cannot safely represent semicolons, equals signs, control characters or the substring mysql:// inside individual credentials/host/database fields. Such inputs are rejected without logging them. Normal URL-encoded slash, colon, at-sign and percent characters are decoded before conversion. Unsupported credentials require an operator-supplied compatible database account; this project never changes passwords automatically.
 
-    node tools/database.js init --config destination.private.json
-    node tools/database.js restore --config destination.private.json --file season.backup.json --reschedule
+For private JSON, sslCa is the path to a trusted CA PEM file relative to that JSON. For recipe URL connections, set nst_db_ssl_ca to a CA PEM file relative to no_safe_turf. Both configure rejectUnauthorized=true and verifyIdentity=true. Without a CA setting TLS is not enabled by this adapter; use it only on your intended trusted network. There is no insecure-TLS switch. Host identity must match the certificate.
 
-Restore refuses occupied databases and checks payload hashes and historical references. --reschedule assigns a future deadline; omitting it retains the archived deadline and can trigger an overdue wipe on startup. Inspect the destination before switching the resource configuration. Keep off-host database backups too.
+Database diagnostics are sanitized; keep oxmysql debug/UI disabled as supplied. Restrict generated server.cfg/private JSON/backup directory access to the server account. Do not expose the resource directory through an HTTP server.
 
-There is no automatic SQLite importer. Retained Python files are legacy/reference; do not run that service against the active v0.2 database.
+## Backup and restore
 
-## Isolated test fixture
+See OPERATIONS.md. The filesystem archive can be restored with the Node tool into a freshly initialized destination. No Python or MariaDB process on the game host is required. Off-host copies and whole-database provider backups remain necessary for machine/disk loss.
 
-tests/run_mariadb_node.js expects the portable Windows MariaDB distribution at .testtools/mariadb-11.4.5-winx64. This historical version is a disposable test fixture, not a production recommendation. The harness creates a random loopback port, password and data directory, runs nine integration cases and stops its own process. It never reads deployment credentials or installs a service.
+## Isolated development fixture
 
+tests/run_mariadb_node.js uses the optional portable MariaDB 11.4.5 Windows distribution in .testtools/mariadb-11.4.5-winx64. This historical test fixture is not a production version recommendation. Each run uses a random loopback port, fresh credentials and a new data directory; it stops its own process and never reads deployment credentials.

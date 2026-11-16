@@ -1,0 +1,9 @@
+{
+  "name": "no-safe-turf-development",
+  "version": "0.3.0",
+  "private": true,
+  "license": "MIT",
+  "engines": {"node": ">=22"},
+  "scripts": {"test": "node tests/run_node.js && node tests/run_lua.js", "test:database": "node tests/run_mariadb_node.js"},
+  "devDependencies": {"wasmoon": "1.16.0", "yaml": "2.8.1"}
+}

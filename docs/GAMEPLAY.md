@@ -14,11 +14,11 @@ A gang costs $250, holds six members, and has leader, officer, and member roles.
 
 Hideouts in Davis and Rancho cost $900 from the buyer's personal balance, with one hideout per gang. Upgrades cost $600 and $1,200 from the shared bank. Upkeep costs $40 per level per active server hour; unpaid upkeep reduces the level, never below one. Restarts do not create retroactive debt. Raid losses decrease from 25 to 20 and 15 percent with each level. Freeform base building is not included.
 
-Members/officers can leave outside an ongoing crime or raid. The leader can leave only if the gang has no other members and no hideout. Leadership transfers and hideout sales are future work; leaders with hideouts therefore remain criminals during the season.
+Joining, creating or leaving a gang applies a 10-minute membership-change cooldown. Members/officers can leave only outside combat, wanted status, robbery, raid and territory capture. The leader can leave only if the gang has no other members and no hideout or territory. Leadership transfers and hideout sales are future work; leaders with hideouts therefore remain criminals during the season.
 
 ## Territories
 
-Davis, Rancho, and Strawberry require three minutes of active presence. At least one other gang must have a living member online. A rival present in the zone resets capture progress. Death, disconnection, or leaving the zone cancels the capture. Capturing a zone awards 25 points and locks it for 30 minutes. Each owned zone raises the fence price by five percent, up to 15 percent. There are no passive payouts, so zones generate no overnight passive income. Collusion between accounts cannot be fully prevented without moderation.
+Davis, Rancho, and Strawberry require three minutes of active presence. At least one eligible rival must be online; an owned zone requires an online member of the defending gang. A rival present in the zone resets capture progress. Death, disconnection, or leaving the zone cancels the capture. The first capture of each zone by a given gang that season awards 25 points; recapturing it grants no repeat points. A completed capture locks it for 30 minutes. Each owned zone raises the fence price by five percent, up to 15 percent. There are no passive payouts, so zones generate no overnight passive income. Collusion between accounts cannot be fully prevented without moderation.
 
 ## Integration contract
 

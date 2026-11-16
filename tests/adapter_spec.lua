@@ -8,12 +8,15 @@ local wire,serial={},0
 json={encode=function(value) serial=serial+1;local key='wire'..serial;wire[key]=NST.copy(value);return key end,decode=function(key) assert(wire[key]);return NST.copy(wire[key]) end}
 promise={new=function() local p={};function p:resolve(v) self.value=v end;return p end}
 Citizen={Await=function(p) return p.value end}
-local fault=false; local commits=0
+local fault=false; local commits=0; local commitLost=false; local stateFault=0;local stateLostWipe=false
 local function storageRequest(_,url,method,body,callback)
+    if method=='GET' and stateFault>0 then stateFault=stateFault-1;callback(503,'');return end
+    if method=='GET' and stateLostWipe then stateLostWipe=false;db.state={season=2,players={},gangs={},territories={},robberies={},hideouts={},drops={},alerts={}};db.revision=db.revision+1;callback(503,'');return end
     if method=='POST' and url=='/commit' then
         if fault then fault=false; callback(503,'');return end
         local input=json.decode(body); assert(input.revision==db.revision,'CAS mismatch')
         db.state=input.state; db.revision=db.revision+1; commits=commits+1
+        if commitLost then commitLost=false;stateFault=1;callback(503,'');return end
     end
     callback(200,json.encode(db))
 end
@@ -38,8 +41,11 @@ function joaat(_) return 1 end
 function CreateVehicleServerSetter(...) return 99 end
 function SetEntityCoords(ped,x,y,z) players[ped].pos={x=x,y=y,z=z} end
 function IsPlayerAceAllowed(...) return false end
-function DropPlayer(src,_) players[tonumber(src)]=nil end
+local droppedMessages={}
+function DropPlayer(src,message) droppedMessages[#droppedMessages+1]=message;players[tonumber(src)]=nil end
 function GetCurrentResourceName() return 'nst' end
+local invoking='untrusted'
+function GetInvokingResource() return invoking end
 os.time=function() return now end
 local function step() timer=timer+20;local ok,err=coroutine.resume(threads[1]);assert(ok,err) end
 local function action(src,name,args) source=src;handlers['nst:action'](name,args or {});step() end
@@ -69,4 +75,22 @@ source=2;handlers['nst:action']('sync',{})
 source=2;handlers.playerDropped();players[2]={id='license:replacement',pos=NSTConfig.spawn,health=200}
 step();assert(not db.state.players['license:b'] and not db.state.players['license:replacement'])
 step()
+-- Persisted respawn survives a lost commit response and a second failed read.
+now=1100;timer=100000;players[1].health=0;step();assert(not db.state.players['license:a'].alive)
+local priorRespawns=eventCount('nst:respawn',1);local priorDrops=db.state.nextDrop
+now=1120;timer=120000;commitLost=true;action(1,'respawn')
+assert(eventCount('nst:respawn',1)==priorRespawns)
+step();assert(db.state.players['license:a'].alive and db.state.nextDrop==priorDrops)
+assert(eventCount('nst:respawn',1)==priorRespawns+1)
+players[1].health=200
+-- Only txAdmin's local monitor event can reconcile death state; no loot refund.
+now=1200;timer=200000;players[1].health=0;step()
+local cash=db.state.players['license:a'].cash;local countDrops=db.state.nextDrop
+handlers['txAdmin:events:playerHealed']({target=1,author='test'});step();assert(not db.state.players['license:a'].alive)
+invoking='monitor';handlers['txAdmin:events:playerHealed']({target=1,author='test'});step()
+assert(db.state.players['license:a'].alive and db.state.players['license:a'].cash==cash and db.state.nextDrop==countDrops)
+assert(eventCount('nst:adminRevive',1)==1)
+-- A scheduled wipe committed behind a failed read is reconciled on later reload.
+players[1].health=200;now=1300;timer=300000;stateLostWipe=true;step();local beforeKicks=#droppedMessages
+step();assert(#droppedMessages>beforeKicks and droppedMessages[#droppedMessages]==NSTText('newSeason'))
 print('adapter_spec: passed (boot, identity/session, authorization, failed commit, post-commit heal, server death)')

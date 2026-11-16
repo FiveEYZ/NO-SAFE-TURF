@@ -1,6 +1,8 @@
 /* Local NUI only: strings are rendered with textContent, never HTML. */
 let state,config,tab='street',noticeTimer,renderedTab,renderedGang;
 const $=id=>document.getElementById(id);
+for(const id of ['menuHint','settingLabel','tagline'])if($(id))$(id).textContent=L[id];
+$('status').textContent=L.connecting;$('close').setAttribute('aria-label',L.closeLabel);
 const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
 async function post(route,data={}){try{await fetch(`https://${GetParentResourceName()}/${route}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});}catch{notice(L.requestFailed);}}
 const act=(action,args={})=>post('action',{action,args});
@@ -49,7 +51,7 @@ function render(){
   for(const d of state.drops)button(row(c),`${L.loot} #${d.id}`,()=>act('loot',{drop:d.id}));
  }
  if(tab==='territory'){
-  card(L.tabs.territory,L.territoryRules);for(const [id,d] of Object.entries(config.territories)){const t=state.territories[id];const c=card(d.label,`${t?.owner||L.unowned}${t?.capture?' · '+(t.capture.progress||0)+' / '+config.captureSeconds+' s':''}`);const r=row(c);gps(r,'territories',id);button(r,L.capture,()=>act('territoryStart',{id}));}
+  card(L.tabs.territory,L.territoryRules);for(const [id,d] of Object.entries(config.territories)){const t=state.territories[id];const c=card(d.label,`${t?.owner||L.unowned}${t?.capture?' · '+(t.capture.progress||0)+' / '+config.captureSeconds+' s'+(t.capture.contested?' · '+L.contested:''):''}`);const r=row(c);gps(r,'territories',id);button(r,L.capture,()=>act('territoryStart',{id}));}
  }
  if(tab==='ranking'){const c=card(L.tabs.ranking);const table=el('table');state.leaderboard.forEach((g,i)=>{const r=el('tr');r.append(el('td',i+1),el('td',g.name),el('td',g.score));table.append(r);});c.append(table);}
  if(tab==='gang'||tab==='police'){const c=card(L.members);for(const person of state.people)c.append(el('p',`${person.id} · ${person.name}`));}

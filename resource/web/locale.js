@@ -1,5 +1,10 @@
 // English is the default interface language.
 window.L = {
+  "connecting": "Connecting...",
+  "menuHint": "F6 · Menu",
+  "settingLabel": "LOS SANTOS / SURVIVAL",
+  "tagline": "No ground is safe.",
+  "closeLabel": "Close",
   "tabs": {
     "street": "Street",
     "gang": "Gang",
@@ -69,7 +74,8 @@ window.L = {
   "policeRules": "Arrests require a wanted suspect with raised hands within three meters. Police batons and patrol vehicles cannot be sold.",
   "raidRules": "Raids require 60 seconds of warning and at least 60 seconds at the target. Offline protection lasts 15 minutes after the last defender leaves.",
   "inventoryRules": "On death, you drop all items and 20% of your cash. Respawn after 15 seconds.",
-  "territoryRules": "Hold the zone for 180 seconds. A rival gang must be online. Rivals inside the zone interrupt the capture.",
+  "territoryRules": "Hold the zone for the configured capture duration. A rival must be online; owned zones require an online defender. Contesting resets progress. Each gang scores once per zone per season.",
+  "contested": "Contested",
   "requestFailed": "Could not contact the game.",
   "progress": "Time held",
   "cooldown": "Cooldown",

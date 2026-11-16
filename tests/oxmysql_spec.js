@@ -1,0 +1,31 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {createOxPool,oxConnectionString}=require('../resource/server/storage/oxmysql');
+async function main(){
+  const config={host:'db',port:3306,user:'test',password:'slash/colon:@percent%',database:'nst',ssl:{ca:'TEST=;',rejectUnauthorized:true,verifyIdentity:true}};
+  const value=oxConnectionString(config);assert(value.includes('password=slash/colon:@percent%'));
+  const parsed=Object.fromEntries(value.split(';').map(p=>p.split('=')));assert.equal(JSON.parse(parsed.ssl).ca,config.ssl.ca);
+  for(const password of ['a=b','a;b','a\nb','abc_mysql://secret'])assert.throws(()=>oxConnectionString({...config,password}));
+  let commits=0,rollbacks=0,queries=0,ack;
+  const api={query_async:async()=>[{outside:true}],startTransaction:async callback=>{
+    const decision=await callback(async()=>{queries++;return [{inside:true}];});
+    if(decision){await new Promise(resolve=>{ack=resolve;});commits++;return true;}rollbacks++;return false;
+  }};
+  const pool=createOxPool(api,fn=>setImmediate(fn));const c=await pool.getConnection();
+  assert.equal((await c.query('SELECT 1'))[0][0].outside,true);
+  await c.beginTransaction();assert.equal((await c.query('SELECT 1'))[0][0].inside,true);
+  let completed=false;const task=c.commit().then(()=>{completed=true;});
+  while(!ack)await new Promise(setImmediate);assert.equal(completed,false);ack();await task;assert.equal(commits,1);c.release();
+  const r=await pool.getConnection();await r.beginTransaction();await r.rollback();r.release();assert.equal(rollbacks,1);
+  const closed=await pool.getConnection();await closed.beginTransaction();closed.release();await new Promise(setImmediate);assert.equal(rollbacks,2);
+  await pool.end();await assert.rejects(()=>pool.getConnection());assert.equal(queries,1);
+  const failed=createOxPool({startTransaction:async cb=>{await cb(async()=>[]);return false;}});
+  const f=await failed.getConnection();await f.beginTransaction();await assert.rejects(()=>f.commit(),/outcome/);f.release();await failed.end();
+  let rollbackAck,ended=false;
+  const delayed=createOxPool({startTransaction:async cb=>{assert.equal(await cb(async()=>[]),false);await new Promise(resolve=>{rollbackAck=resolve;});return false;}});
+  const d=await delayed.getConnection();await d.beginTransaction();const ending=delayed.end().then(()=>{ended=true;});
+  while(!rollbackAck)await new Promise(setImmediate);assert.equal(ended,false);rollbackAck();await ending;assert.equal(ended,true);
+  const unavailable=createOxPool({isReady:()=>false});await assert.rejects(()=>unavailable.getConnection(),/not ready/);await unavailable.end();
+  console.log('PASS: oxmysql transaction commit acknowledgement, rollback, resource stop, failure and private config encoding');
+}
+main().catch(e=>{console.error(e);process.exitCode=1;});

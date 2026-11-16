@@ -17,12 +17,13 @@ CreateThread(function()
     for _,d in pairs(NSTConfig.robberies) do blip(d.pos,d.label,156,1) end
     for _,d in pairs(NSTConfig.hideouts) do blip(d.pos,d.label,40,5) end
     for _,d in pairs(NSTConfig.territories) do blip(d.pos,d.label,437,47) end
-    blip(NSTConfig.fence,'Fence',500,2); blip(NSTConfig.shop,'Equipment',110,2); blip(NSTConfig.policeStation,'Police duty',60,3)
+    blip(NSTConfig.fence,NSTText('fence'),500,2); blip(NSTConfig.shop,NSTText('equipment'),110,2); blip(NSTConfig.policeStation,NSTText('policeDuty'),60,3)
 end)
 RegisterCommand('nst',function()
+    if not opened and IsNuiFocused() then return end
     opened=not opened; SetNuiFocus(opened,opened); SendNUIMessage({type='open',value=opened}); if opened then send('sync') end
 end,false)
-RegisterKeyMapping('nst','NO SAFE TURF: open menu','keyboard','F6')
+RegisterKeyMapping('nst',NSTText('menuBinding'),'keyboard','F6')
 RegisterNUICallback('close',function(_,cb) opened=false; SetNuiFocus(false,false); SendNUIMessage({type='open',value=false}); cb({ok=true}) end)
 RegisterNUICallback('action',function(data,cb)
     if type(data)=='table' then send(data.action,data.args) end; cb({ok=true})
@@ -49,6 +50,12 @@ end)
 RegisterNetEvent('nst:respawn',function() spawn() end)
 RegisterNetEvent('nst:release',function() local p=NSTConfig.policeStation; SetEntityCoords(PlayerPedId(),p.x,p.y,p.z,false,false,false,false) end)
 RegisterNetEvent('nst:heal',function() local p=PlayerPedId(); if not IsEntityDead(p) then SetEntityHealth(p,math.min(GetEntityMaxHealth(p),GetEntityHealth(p)+50)) end end)
+RegisterNetEvent('nst:adminRevive',function()
+    local ped=PlayerPedId(); local pos=GetEntityCoords(ped)
+    if IsEntityDead(ped) then NetworkResurrectLocalPlayer(pos.x,pos.y,pos.z,GetEntityHeading(ped),true,false) end
+    ped=PlayerPedId(); SetEntityHealth(ped,GetEntityMaxHealth(ped)); ClearPedBloodDamage(ped)
+    lastKit=nil; lastBat=nil; send('sync')
+end)
 CreateThread(function()
     while true do Wait(5000); if spawned and not state then send('sync') end end
 end)

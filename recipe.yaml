@@ -1,27 +1,46 @@
 $engine: 3
+$minFxVersion: 12913
 $onesync: 'on'
 name: NO SAFE TURF
-version: 0.2.1
+version: 0.3.0
 author: FiveEYZ
 description: Standalone English crime and survival for FiveM Enhanced. MariaDB, gangs, robberies, police and weekly seasons. No Python required.
 
 tasks:
+  # The fresh-install recipe never permits txAdmin's optional database deletion.
+  - action: write_file
+    file: ./tmp/nst-install-policy.json
+    data: '{"dbDelete":false}'
+  - action: load_vars
+    src: ./tmp/nst-install-policy.json
   - action: connect_database
 
-  # Upload the matching asset to the v0.2.1 GitHub Release before using this recipe.
+  # Upload the matching asset to the v0.3.0 GitHub Release before using this recipe.
   - action: download_file
-    url: https://github.com/FiveEYZ/NO-SAFE-TURF/releases/download/v0.2.1/no-safe-turf-txadmin.zip
+    url: https://github.com/FiveEYZ/NO-SAFE-TURF/releases/download/v0.3.0/no-safe-turf-txadmin.zip
     path: ./tmp/nst.zip
   - action: unzip
     src: ./tmp/nst.zip
     dest: ./tmp/nst
   - action: query_database
+    file: ./tmp/nst/database/mariadb/000_recipe_preflight.sql
+  - action: query_database
     file: ./tmp/nst/database/mariadb/001_initial.sql
+
+  - action: download_file
+    url: https://github.com/overextended/oxmysql/releases/download/v2.14.3/oxmysql.zip
+    path: ./tmp/oxmysql.zip
+  - action: unzip
+    src: ./tmp/oxmysql.zip
+    dest: ./tmp/oxmysql
+  - action: move_path
+    src: ./tmp/oxmysql/oxmysql
+    dest: ./resources/[standalone]/oxmysql
 
   # Same base-resource source as the official Enhanced Basic Server recipe.
   - action: download_github
     src: https://github.com/citizenfx/cfx-server-data
-    ref: master
+    ref: 32d98e7524b952faf8b220d719615b0346b0a6cc
     subpath: resources
     dest: ./tmp/cfx
   - action: move_path
@@ -33,6 +52,9 @@ tasks:
   - action: move_path
     src: ./tmp/nst/resource
     dest: ./resources/[local]/no_safe_turf
+  - action: move_path
+    src: ./tmp/nst/database_config
+    dest: ./resources/[local]/nst_database_config
   - action: move_path
     src: ./tmp/nst/deploy/recipe-server.cfg
     dest: ./server.cfg
@@ -48,3 +70,9 @@ tasks:
     path: ./tmp/cfx
   - action: remove_path
     path: ./tmp/nst.zip
+  - action: remove_path
+    path: ./tmp/oxmysql
+  - action: remove_path
+    path: ./tmp/oxmysql.zip
+  - action: remove_path
+    path: ./tmp/nst-install-policy.json

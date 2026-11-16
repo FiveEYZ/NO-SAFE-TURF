@@ -1,32 +1,39 @@
-# txAdmin recipe
+# txAdmin installation recipe · 0.3.0
 
-This custom recipe follows the official Enhanced Basic Server structure and uses the documented engine 3 actions. It is not an officially endorsed/popular recipe.
+This custom engine-3 recipe uses documented actions and the official Enhanced base-resource structure. It does not need inclusion in the official popular-recipes list. All NUI and upstream runtime files are prebuilt.
 
-## Publish once
+## Publication status
 
-1. Upload the source, including root recipe.yaml, to FiveEYZ/NO-SAFE-TURF. Never upload deploy/mariadb.private.json, generated server.cfg, .testdata or credentials.
-2. Run tools/package.ps1 with PowerShell 7 from the source workspace. It creates a regular archive and dist/no-safe-turf-txadmin.zip containing the installed mysql2 dependencies. No npm installation is needed on the game server.
-3. Create a GitHub Release tagged v0.2.1 and attach no-safe-turf-txadmin.zip with that exact filename. The release asset must be reachable by txAdmin without authentication. A source-only ZIP is insufficient because node_modules is ignored by Git.
-4. If your default branch is main, the recipe address is:
+The supplied repository is FiveEYZ/NO-SAFE-TURF. On 2026-11-16, unauthenticated checks returned HTTP 404 for both the main-branch raw recipe and the v0.3.0 release asset. A private repository or a different branch may explain the recipe response. No upload, commit, push or release publication was performed in this work.
+
+After explicit owner approval, upload the reviewed source including root recipe.yaml and attach dist/no-safe-turf-txadmin.zip to release tag v0.3.0. Both recipe and asset must be anonymously reachable by txAdmin. If main is the actual published branch, the URL is:
 
     https://raw.githubusercontent.com/FiveEYZ/NO-SAFE-TURF/main/recipe.yaml
 
-Use the actual branch in that address if different. The repository branch, permissions and release availability have not been verified from this workspace. Publishing has not been performed.
+This is the prepared target, not a verified working installation URL.
 
-## Install
+## Fresh installation
 
-1. Start a new txAdmin profile using an Enhanced server artifact with embedded Node 22 support. Choose Remote URL Template and enter the raw recipe URL above. Use a fresh server data directory.
-2. Enter your Cfx license and database details in txAdmin. For your LAN deployment the host is 192.168.1.5, port 3306, and supplied user/database is NST_Bredbyn. Enter the password privately in the form. Do not select an option that deletes an existing database. A fresh dedicated database is preferred; the recipe also accepts txAdmin-generated database names.
-3. Run the recipe. It connects to MariaDB, downloads the release, imports the schema and installs the base resources and mod. The database must be MariaDB 10.11+; the account needs CREATE for deployment and SELECT/INSERT/UPDATE/DELETE at runtime.
-4. Review and save server.cfg in txAdmin, then start. The first startup initializes the season only if all application tables are empty and metadata is absent. Existing metadata is preserved. Run nst_db_status and nst_status in the console.
-5. Join with an Enhanced client and press F6. Follow TESTING.md before production use. Configure server listing metadata in Cfx Portal as required by the official Enhanced template.
+1. Use an isolated txAdmin profile, a proper Enhanced server artifact supporting embedded Node 22, licensed clients and your Cfx server key.
+2. Select Remote URL Template and use the published raw recipe. Choose a fresh server data directory and dedicated empty MariaDB 10.11+ database. Target 16–32 clients; do not assume the deployer's default slot count is load-tested.
+3. Enter database host, port, database, user and password in txAdmin. The recipe forces dbDelete=false, checks database compatibility and rejects existing nst_* tables before importing schema. Do not use the fresh installer to upgrade.
+4. Review generated server.cfg and start. Resource order: mapmanager/spawnmanager, nst_database_config, oxmysql, no_safe_turf. The private connection URL is converted by the preloader; the first season is initialized only on an empty schema.
+5. Run nst_db_status and nst_status. Confirm server-backups is private and writable before scheduling seasons. Open F6 in game and complete TESTING.md before any production decision.
 
-No private JSON file is required for recipe installs: the mod reads the server-only nst_db_connection convar populated from txAdmin's dbConnectionString. Manual private JSON installs remain supported when that convar is empty. Never publish the generated server.cfg or use replicated convars for credentials.
+Server listing metadata belongs in Cfx Portal following the official Enhanced template. The generated cfg preserves documented maxClients/serverEndpoints/svLicense/addPrincipalsMaster/dbConnectionString placeholders. ACE administrators can use nst.admin commands.
 
-The recipe does not install basic-gamemode because NO SAFE TURF controls spawning and gameplay. Base mapmanager/spawnmanager follow the official recipe's master reference; pin a reviewed Cfx commit before a reproducible public release. Existing off-host backup and restore procedures remain necessary.
+## Pinned inputs and prerequisites
 
-## Validation and limits
+- oxmysql v2.14.3 release ZIP: SHA256 F6DB8F612A36A8A75FCCDE300E8C4135696B5BBCA5770CD7F26458949E1F7872.
+- Cfx server-data commit 32d98e7524b952faf8b220d719615b0346b0a6cc. Downloaded archive SHA256 7A394DC03E0B0999DD13269EA471436B00E80DCDEE974D7CD727FFACA95E733B.
+- Mod release v0.3.0; publish the matching reviewed ZIP, not GitHub's source-only ZIP.
 
-Local checks cover connection-string parsing, first-start bootstrap, preservation of existing metadata, refusal to bootstrap occupied tables, and existing database regression cases. Actual txAdmin deployment/downloads and in-game startup remain untested. Recipe execution creates database tables; no deployment database was modified while preparing these files.
+Upstream archive downloads, paths and manifests were inspected locally. Standard documented recipe actions do not provide a hash-verification field, so no invented action is used; version references are locked and build-time checksums recorded. Preserve release assets rather than replacing them under the same tag.
 
-Sources: [official recipe guidelines](https://github.com/citizenfx/txAdmin-recipes), [recipe actions](https://github.com/citizenfx/txAdmin/blob/master/docs/recipe.md), [Enhanced template](https://github.com/citizenfx/txAdmin-recipes/tree/main/default-fivem-enhanced).
+The official connect_database implementation always attempts CREATE DATABASE IF NOT EXISTS and has no documented CA input. If the provider forbids that command or requires custom-CA TLS at installation, use the manual/pre-created database path in MARIADB.md and txAdmin's existing-server-data flow. The recipe cannot change this engine limitation.
+
+## Verification boundary
+
+The local recipe smoke test replays file operations against downloaded pinned archives and the built local release. SQL is tested separately on disposable MariaDB. This is not execution of txAdmin Server Deployer, the remote release or Cfx natives. Those checks remain blocked on reachable publication, server key/artifact and test clients.
+
+Sources: [official recipes](https://github.com/citizenfx/txAdmin-recipes), [recipe documentation](https://github.com/citizenfx/txAdmin/blob/master/docs/recipe.md), [database action implementation](https://github.com/citizenfx/txAdmin/blob/master/core/deployer/recipeEngine.js).

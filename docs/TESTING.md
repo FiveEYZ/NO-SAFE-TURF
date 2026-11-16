@@ -1,33 +1,28 @@
-# Version 0.2 verification
+# Verification protocol · 0.3.0
 
-Run node tests/run_node.js for JavaScript syntax, 209 weekly schedule deadlines and DST boundaries, bridge validation/startup/retry/failure handling, mocked FiveM callback dispatch and NUI DOM contracts.
+Verified locally on 2026-11-16:
 
-On 2026-11-16, node tests/run_mariadb_node.js passed nine real MariaDB cases against a disposable 11.4.5 fixture: concurrent claims, entity/item persistence, changed-row writes, rollback, wipe preservation/idempotence, before/after-commit recovery, overdue wipes and backup/restore/corruption. It stopped its own server afterward and did not access deployment credentials.
+- npm test passes JavaScript syntax, 209 weekly deadlines/DST checks, private URL/config conversion, oxmysql transaction acknowledgement/rollback/shutdown contracts, storage bridge validation/retry, NUI DOM checks and recipe structure.
+- Five Lua 5.4 suites pass under Wasmoon: gameplay, police, full earned-progression chain, adapter and client focus. Locale scripts load in manifest order. Adapter checks include a lost commit response plus failed reconciliation read, delayed recovery of respawn, lost scheduled-wipe response, trusted txAdmin revive and rejected untrusted heal events.
+- npm run test:database passes 15 cases on disposable MariaDB 11.4.5. Includes first-install guard, initial metadata protection, concurrent item claims, changed-row writes, actual SQL rollback, killed database connection and reconnect, backup failure blocking manual/scheduled wipe, real on-disk archive restore, hash corruption rejection, wipe idempotence and failure around commit. The oxmysql contract test uses a proxy implementing the pinned export contract over real MariaDB; it does not run the Cfx export boundary.
+- node tests/recipe_spec.js --files replays recipe file operations using the built local ZIP and downloaded pinned upstream archives. It verifies hashes, paths, start order, documented placeholders and dbDelete=false. It does not launch txAdmin, fetch the unpublished mod release or execute recipe SQL against a remote server.
+- tools/package.ps1 screens credentials and excludes private files, archives, Python and test data. All runtime frontend files are already built.
 
-The optional development regression runner python tests/run_local.py also passed 15 cases and all four Lua suites; ten legacy live database cases were skipped. Python is used only by these retained development tests, not by the deployed mod. Cfx native/export mocks do not prove actual server startup or runtime interoperability.
+Environment: Node 24.21.0; embedded runtime target Node 22; Wasmoon 1.16.0/Lua 5.4; YAML 2.8.1; mysql2 3.14.1 for offline tests; oxmysql runtime pin 2.14.3. No Python command is used by the maintained test/build/install paths. Root npm ci --ignore-scripts prepares tests; resource npm ci --omit=dev --ignore-scripts prepares offline tools.
 
-The older baseline results below remain reference evidence. Use the Node adapter and MariaDB for current installation.
+Disposable database binaries are optional developer fixtures, not deployment dependencies. .testdata holds artifacts and the child database processes are stopped. The downloaded MariaDB 11.4.5 Windows fixture SHA256 is b7c11d38657f16b837e68199d73670510aadb78f42dfa5d5fdea31a7aab342e3. Use a current patched MariaDB for hosting.
 
-# Verification and two-client test protocol
+## Outstanding deployment acceptance
 
-Run local checks with `python tests/run_local.py` from the project root. The latest complete run is documented below. Tests start temporary SQLite databases and a loopback HTTP server, never a public game server.
+- Actual Cfx resource startup and cross-resource Promise/native behavior.
+- External MariaDB host, grants, TLS certificate validation and network interruption behavior.
+- Clean txAdmin Server Deployer run against reachable recipe/release URLs.
+- txAdmin heal/revive, teleport, kick/shutdown and focus behavior with real clients.
+- Real hosting filesystem backup write/readback and off-host restore rehearsal.
+- Two-client Enhanced protocol, native coordinates/models, NUI rendering and 16/32-player load/endurance testing.
+- Physical power-loss durability.
 
-Last verified **2026-11-16**: the baseline run passed 15 Python test cases, four Lua suites, and one NUI/DOM suite; all resource Lua files compiled and frontend JavaScript passed syntax checks. Live MariaDB tests are intentionally skipped in that command. Separately, `python tests/run_mariadb.py` passed 11 cases against an isolated MariaDB 11.4.5 server (ten live database cases plus the shared validation case). Environment: Python 3.12.10, SQLite 3.49.1, PyMySQL 1.1.2, Lupa 2.6/Lua 5.4, tzdata 2025.2, Node 24.21.0. Windows sandbox access required elevated execution for temporary databases/local child processes; tests used isolated test data and loopback. Both child services were stopped afterward. No production environment was changed.
-
-## Local automated tests
-
-| Group | Verification |
-|---|---|
-| Python/SQLite/HTTP | Two concurrent claims: exactly one commit; stale revision/replay; API token; unauthorized season change; one-time wipe; persistent accounts/bans/history; failures before/after wipe commit; backup/restore; restore with a new schedule; Stockholm spring/autumn transitions |
-| Real Lua → SQLite | Robbery start/tick/finish; persistence and duplicate-reward prevention; state retained after reopening the database |
-| MariaDB + live service | Entity/item rows; unchanged-row trigger check; independent competing claims; real Lua robbery persistence/replay; failed transaction rollback; overdue wipe; persistent tables; wipe idempotence; before/after-commit failure injection; export/restore/hash corruption; actual service CLI HTTP 401/409 |
-| gameplay_spec.lua | Robbery progress, time jumps, interruption, economy, distance, roles, atomic storage, raid locks, and rival-dependent territories |
-| police_spec.lua | Role switching, arrest, sentences across reconnects, spawn protection, one-time death handling, a single looter, raid window/cooldown/loss, and limited offline protection |
-| integration_spec.lua | Earned progression from starting cash through two store robberies, gang, hideout, depot, secured loot, raid, police, and death |
-| adapter_spec.lua | Mocked FiveM natives/local storage export: startup, session IDs, authorization, failed commit without effects, healing after commit, server-observed death, and respawn |
-| web_spec.js | Real frontend logic in a DOM mock: six tabs, action payloads, input/focus, text-based XSS-safe rendering, and network failures |
-
-Wipe failures are simulated at three defined points and the database is reopened; this is not a physical power-loss test. DOM/native mocks are not browser or GTA playtests. Lua files also compile separately with Lua 5.4, and JavaScript syntax is checked with Node.
+The prepared main-branch recipe and v0.3.0 asset URLs returned HTTP 404 on 2026-11-16. No publication or production change was made. A server key, correct server/client artifacts, two licensed clients, a fresh test database and reachable approved release are needed for the remaining acceptance work.
 
 ## Two clients — NOT RUN
 
@@ -59,4 +54,3 @@ Record: date ___, testers A/B ___, GTA version ___, FiveM client version ___, se
 | 20 | Disconnect the test database while A attempts to sell | Economy stops; no speculative gains; recovery uses persisted state | Not run |
 
 Load tests with 16/32 clients, endurance testing, physical backups on a separate disk, and manual NUI inspection at different screen sizes remain acceptance work. Shorten timers only in a separate test configuration and restore them afterward.
-

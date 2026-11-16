@@ -1,5 +1,8 @@
 local envelope, busy, queue = nil, false, {}
 local sessions, rates, vehicles, respawning, damageRates = {}, {}, {}, {}, {}
+local administrativeDrops,adminHealing={},{}
+local recoveryState=nil
+local lastStorageError=nil
 local function request(path,method,data)
     local p=promise.new()
     local ok=pcall(function() exports[GetCurrentResourceName()]:storageRequest(path,method or 'GET',data and json.encode(data) or '',function(code,body)
@@ -7,7 +10,12 @@ local function request(path,method,data)
         p:resolve({code=code,data=ok and obj or nil})
     end) end)
     if not ok then p:resolve({code=503}) end
-    return Citizen.Await(p)
+    local result=Citizen.Await(p)
+    if result.code==503 then
+        local message=result.data and result.data.error or NSTText('databaseNotReady')
+        if message~=lastStorageError then print('[NST] '..message);lastStorageError=message end
+    elseif result.code==200 then lastStorageError=nil end
+    return result
 end
 local function identity(src)
     for _,id in ipairs(GetPlayerIdentifiers(src)) do if id:sub(1,8)=='license:' then return id end end
@@ -51,7 +59,7 @@ local function view(src)
     local ownGang=gang and {name=gang.name,bank=gang.bank,items=gang.items,score=gang.score,role=gang.members[id]}
     local territories,hideouts,robberies={},{},{}
     for key,r in pairs(s.robberies) do robberies[key]={progress=r.actor==id and r.progress or nil,cooldown=r.cooldown,active=r.actor~=nil,mine=r.actor==id} end
-    for key,t in pairs(s.territories) do territories[key]={owner=t.owner and s.gangs[t.owner] and s.gangs[t.owner].name,capture=t.capture and {ends=t.capture.ends,progress=t.capture.progress}} end
+    for key,t in pairs(s.territories) do territories[key]={owner=t.owner and s.gangs[t.owner] and s.gangs[t.owner].name,capture=t.capture and {ends=t.capture.ends,progress=t.capture.progress,contested=t.capture.contested}} end
     for key,h in pairs(s.hideouts) do hideouts[key]={owner=s.gangs[h.gang] and s.gangs[h.gang].name,level=h.level,raid=h.raid and {startsAt=h.raid.startsAt,endsAt=h.raid.endsAt,presence=h.raid.presence}} end
     TriggerClientEvent('nst:state',src,{player=p,gang=ownGang,invites=invites,people=people,drops=drops,alerts=alerts,territories=territories,hideouts=hideouts,robberies=robberies,leaderboard=leaderboard,season=s.season,nextWipe=envelope.nextWipe,now=os.time()})
 end
@@ -73,6 +81,9 @@ local function effects(old,s)
             if prev and (p.respawnSerial or 0)>(prev.respawnSerial or 0) then
                 respawning[id]=GetGameTimer()+10000; TriggerClientEvent('nst:respawn',src)
             end
+            if prev and (p.adminReviveSerial or 0)>(prev.adminReviveSerial or 0) then
+                respawning[id]=GetGameTimer()+10000; TriggerClientEvent('nst:adminRevive',src)
+            end
             if (p.jailUntil or 0)>os.time() then
                 local ped=GetPlayerPed(src); local pos=position(src)
                 local jail={x=459.2,y=-994.4,z=24.9}
@@ -85,12 +96,13 @@ local function commit(nextState,action,actor)
     local old=envelope.state
     local r=request('/commit','POST',{revision=envelope.revision,state=nextState,audit={action=action,actor=actor or 'system'}})
     if r.code~=200 then
+        recoveryState=old
         envelope=nil -- Unknown outcome is reconciled before accepting more work.
         local fresh=request('/state'); if fresh.code==200 then
-            envelope=fresh.data; effects(old,envelope.state)
-            if old.season~=envelope.state.season then for _,n in ipairs(GetPlayers()) do DropPlayer(n,'A new season has started. Please reconnect.') end else broadcast() end
+            envelope=fresh.data; effects(old,envelope.state); recoveryState=nil
+            if old.season~=envelope.state.season then for _,n in ipairs(GetPlayers()) do DropPlayer(n,NSTText('newSeason')) end else broadcast() end
         end
-        error('Storage changed or did not respond. Refresh and check the result.',0)
+        error(NSTText('storageChanged'),0)
     end
     envelope=r.data; effects(old,envelope.state); broadcast()
 end
@@ -99,7 +111,7 @@ local function tick(s,c)
         local p=s.players[id]
         if p then
             if o.alive then respawning[id]=nil end
-            if not o.alive and p.alive~=false and (respawning[id] or 0)<=GetGameTimer() then NST.onDeath(s,{id=id,now=c.now,pos=o.pos,online=c.online}) end
+            if not o.alive and p.alive~=false and not adminHealing[id] and (respawning[id] or 0)<=GetGameTimer() then NST.onDeath(s,{id=id,now=c.now,pos=o.pos,online=c.online}) end
             if (p.jailUntil or 0)>0 and p.jailUntil<=c.now then p.jailUntil=0 end
         end
     end
@@ -108,9 +120,9 @@ local function tick(s,c)
 end
 NST.handlers.useItem=function(s,c,a)
     local p=NST.player(s,c.id)
-    NST.assert(p.alive and (p.jailUntil or 0)<=c.now and not p.surrendered,'You cannot use this right now.')
-    NST.assert(a.item=='medkit' and (p.items.medkit or 0)>0,'You do not have a medkit.')
-    NST.assert((p.healCooldown or 0)<=c.now,'Wait before using another medkit.')
+    NST.assert(p.alive and (p.jailUntil or 0)<=c.now and not p.surrendered,NSTText('cannotUse'))
+    NST.assert(a.item=='medkit' and (p.items.medkit or 0)>0,NSTText('noMedkit'))
+    NST.assert((p.healCooldown or 0)<=c.now,NSTText('medkitWait'))
     p.items.medkit=p.items.medkit-1; p.healCooldown=c.now+30
 end
 local function enqueue(job,src)
@@ -139,8 +151,8 @@ RegisterNetEvent('nst:action',function(action,args)
     local nonce=sessions[src].nonce
     if not enqueue(function()
         if identity(src)~=id or not sessions[src] or sessions[src].nonce~=nonce then return end
-        NST.assert(envelope,'The database is not ready.')
-        local c=context(id,src); NST.assert(c.pos,'Wait for your character to load.')
+        NST.assert(envelope,NSTText('databaseNotReady'))
+        local c=context(id,src); NST.assert(c.pos,NSTText('characterLoading'))
         sessions[src].pos=c.pos
         local s=NST.copy(envelope.state); local isNew=not s.players[id]; local p=NST.player(s,id)
         if isNew then p.protectedUntil=c.now+20 end
@@ -148,32 +160,73 @@ RegisterNetEvent('nst:action',function(action,args)
         if action=='sync' then
             if p.role=='police' and p.alive and (p.jailUntil or 0)<=c.now then p.kit=true end
         else
-            NST.assert(NST.handlers[action],'Unknown action')
+            NST.assert(NST.handlers[action],NSTText('unknownAction'))
             NST.handlers[action](s,c,clean)
         end
         commit(s,action,id)
         if identity(src)==id and sessions[src] and sessions[src].nonce==nonce then
             if action=='useItem' then TriggerClientEvent('nst:heal',src) end
-            if action~='sync' then tell(src,'Action completed.') end
+            if action~='sync' then tell(src,NSTText('actionComplete')) end
         end
-    end,src) then tell(src,'The server is busy. Try again.') end
+    end,src) then tell(src,NSTText('serverBusy')) end
+end)
+-- txAdmin server-local event only: never expose this as a network event.
+AddEventHandler('txAdmin:events:playerHealed',function(data)
+    if GetInvokingResource()~='monitor' or type(data)~='table' then return end
+    for _,n in ipairs(GetPlayers()) do
+        local src=tonumber(n); local id=identity(src)
+        if id and (data.target==-1 or tonumber(data.target)==src) then
+            local session=sessions[src]; local nonce=session and session.nonce
+            adminHealing[id]=true
+            enqueue(function()
+                local ok,err=pcall(function()
+                    if not envelope or identity(src)~=id or (nonce and (not sessions[src] or sessions[src].nonce~=nonce)) then return end
+                    local s=NST.copy(envelope.state); local c=context(id,src)
+                    if s.players[id] then
+                        NST.onAdminRevive(s,c)
+                        s.players[id].adminReviveSerial=(s.players[id].adminReviveSerial or 0)+1
+                        commit(s,'admin_revive','txAdmin')
+                    end
+                end)
+                adminHealing[id]=nil
+                if not ok then error(err,0) end
+            end)
+        end
+    end
+end)
+AddEventHandler('txAdmin:events:playerKicked',function(data)
+    if GetInvokingResource()~='monitor' or type(data)~='table' then return end
+    for _,n in ipairs(GetPlayers()) do local src=tonumber(n); if data.target==-1 or tonumber(data.target)==src then administrativeDrops[src]=identity(src) end end
+end)
+AddEventHandler('txAdmin:events:serverShuttingDown',function()
+    if GetInvokingResource()~='monitor' then return end
+    for _,n in ipairs(GetPlayers()) do local src=tonumber(n);administrativeDrops[src]=identity(src) end
 end)
 AddEventHandler('playerDropped',function()
+    local droppedAt=os.time()
     local src=source; local session=sessions[src]; local id=session and session.id or identity(src)
+    local administrative=administrativeDrops[src]==id; administrativeDrops[src]=nil
+    local ped=GetPlayerPed(src); local physicallyDead=ped and ped~=0 and GetEntityHealth(ped)<=0
     sessions[src]=nil; rates[src]=nil; damageRates[src]=nil
     if not id then return end
     local pos=position(src) or (session and session.pos) or NSTConfig.spawn
     cleanupVehicle(id)
     enqueue(function()
         if not envelope then return end
-        local s=NST.copy(envelope.state); NST.onDisconnect(s,{id=id,pos=pos,now=os.time(),online={}})
+        local s=NST.copy(envelope.state); NST.onDisconnect(s,{id=id,pos=pos,now=droppedAt,online={},administrative=administrative,physicallyDead=physicallyDead})
         commit(s,'disconnect',id)
     end)
 end)
 AddEventHandler('weaponDamageEvent',function(sender,data)
-    local id=identity(sender); if not id or not envelope then return end
+    local id=identity(sender); if not id or not envelope then CancelEvent(); return end
     local victimEntity=NetworkGetEntityFromNetworkId(data.hitGlobalId or 0)
     local victim= victimEntity~=0 and identity(NetworkGetEntityOwner(victimEntity)) or nil
+    local attackerPos,attackerAlive=position(sender)
+    if not attackerAlive then CancelEvent(); return end
+    if victim then
+        local victimSrc=NetworkGetEntityOwner(victimEntity); local victimPos,victimAlive=position(victimSrc)
+        if victimEntity~=GetPlayerPed(victimSrc) or not victimAlive or not NST.near(attackerPos,victimPos,5) or GetPlayerRoutingBucket(sender)~=GetPlayerRoutingBucket(victimSrc) then CancelEvent(); return end
+    end
     local p=envelope.state.players[id]; local v=victim and envelope.state.players[victim]
     if not p or not p.alive or (p.protectedUntil or 0)>os.time() or (p.jailUntil or 0)>os.time() or p.surrendered or (v and (v.protectedUntil or 0)>os.time()) then CancelEvent(); return end
     local weapon=data.weaponType
@@ -189,28 +242,35 @@ AddEventHandler('weaponDamageEvent',function(sender,data)
 end)
 RegisterCommand('nst_status',function(src)
     if src~=0 and not IsPlayerAceAllowed(src,'nst.admin') then return end
-    tell(src,envelope and ('Season '..tostring(envelope.state.season)..', revision '..envelope.revision..', queue '..#queue) or 'The database is not ready.')
+    tell(src,envelope and NSTText('status',envelope.state.season,envelope.revision,#queue) or NSTText('databaseNotReady'))
 end,false)
 RegisterCommand('nst_wipe',function(src,args)
     if src~=0 and not IsPlayerAceAllowed(src,'nst.admin') then return end
     local dry=args[1]~='execute'; local key=args[2]
-    if not key then tell(src,'nst_wipe dryrun|execute UNIQUE-KEY'); return end
+    if not key then tell(src,NSTText('wipeHelp')); return end
     enqueue(function()
         local old=envelope and envelope.state
-        TriggerClientEvent('nst:notice',-1,dry and 'Simulating wipe.' or 'Maintenance: resetting the season.')
+        TriggerClientEvent('nst:notice',-1,dry and NSTText('wipeSimulating') or NSTText('wipeMaintenance'))
         local r=request('/wipe','POST',{key=key,dryRun=dry})
-        NST.assert(r.code==200,'Wipe failed; check the service log.')
-        local fresh=request('/state'); NST.assert(fresh.code==200,'Could not load the season.'); envelope=fresh.data
+        if r.code~=200 then recoveryState=old; envelope=nil; error((r.data and r.data.error) or NSTText('wipeFailed'),0) end
+        envelope=r.data
         if old then effects(old,envelope.state) end
-        if not dry then for _,n in ipairs(GetPlayers()) do DropPlayer(n,'A new season has started. Please reconnect.') end end
-        tell(src,dry and 'Simulation complete; no data changed.' or 'Wipe complete.')
+        if not dry and not r.data.alreadyDone then for _,n in ipairs(GetPlayers()) do DropPlayer(n,NSTText('newSeason')) end end
+        tell(src,dry and NSTText('wipeSimulated') or NSTText('wipeComplete'))
     end,src)
 end,false)
 CreateThread(function()
     local lastTick=0; local warned={}
     while true do
         if not envelope then
-            local r=request('/state'); if r.code==200 then envelope=r.data end
+            local r=request('/state'); if r.code==200 then
+                envelope=r.data
+                if recoveryState then
+                    effects(recoveryState,envelope.state)
+                    if recoveryState.season~=envelope.state.season then for _,n in ipairs(GetPlayers()) do DropPlayer(n,NSTText('newSeason')) end end
+                    recoveryState=nil
+                end
+            end
             if not envelope then Wait(3000) end
         end
         if envelope then
@@ -225,16 +285,16 @@ CreateThread(function()
                     local c=context('system',0); local s=NST.copy(envelope.state); tick(s,c)
                     -- GET also processes due wipes even on an empty server.
                     local fresh=request('/state')
-                    if fresh.code~=200 then envelope=nil; return end
+                    if fresh.code~=200 then recoveryState=envelope.state; envelope=nil; return end
                     local remaining=(fresh.data.nextWipe or 0)-os.time()
                     for _,seconds in ipairs({900,300,60}) do
                         local key=tostring(fresh.data.nextWipe)..':'..seconds
-                        if remaining>0 and remaining<=seconds and not warned[key] then warned[key]=true; TriggerClientEvent('nst:notice',-1,'Season reset in '..math.ceil(remaining/60)..' minute(s). Secure your score for the week.') end
+                        if remaining>0 and remaining<=seconds and not warned[key] then warned[key]=true; TriggerClientEvent('nst:notice',-1,NSTText('wipeWarning',math.ceil(remaining/60))) end
                     end
                     if fresh.data.revision~=envelope.revision then
                         local changedSeason=fresh.data.state.season~=envelope.state.season
                         envelope=fresh.data
-                        if changedSeason then for _,n in ipairs(GetPlayers()) do DropPlayer(n,'A new season has started. Please reconnect.') end end
+                        if changedSeason then for _,n in ipairs(GetPlayers()) do DropPlayer(n,NSTText('newSeason')) end end
                     elseif json.encode(s)~=json.encode(envelope.state) then commit(s,'tick','system')
                     else effects(envelope.state,envelope.state); broadcast() end
                 end)

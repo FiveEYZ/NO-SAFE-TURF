@@ -1,6 +1,7 @@
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
+const L=require('./locale_en');
 
 function readConfig(filename) {
   return validateConfig(JSON.parse(fs.readFileSync(filename, 'utf8').replace(/^\uFEFF/, '')),path.dirname(filename));
@@ -31,7 +32,7 @@ function validateConfig(raw, directory='.') {
 function safeError(error) {
   // Never return driver messages, SQL, connection strings or credentials.
   const code = typeof error?.code === 'string' && /^[A-Z0-9_]{1,50}$/.test(error.code) ? error.code : 'STORAGE_UNAVAILABLE';
-  return `Storage operation failed (${code}). Check the private database configuration and schema.`;
+  return L.failure.replace('{code}',code);
 }
 
 module.exports = {readConfig, connectionConfig, safeError};

@@ -20,13 +20,13 @@ j.now=1050; j.online.j={pos=j.pos,alive=true}; NST.gameTick(jump,j); reject(jump
 j.online={}; NST.gameTick(jump,j); assert(not jump.players.j.robbery and not jump.robberies.shop.actor)
 s.players.a.cash=5000; s=NST.apply(s,c,'gangCreate',{name='Asphalt'})
 local b=ctx('b',NSTConfig.hideouts.davis.pos); NST.player(s,'b')
-s=NST.apply(s,c,'gangInvite',{target='b'}); s=NST.apply(s,b,'gangAccept',{gang='a'})
+s=NST.apply(s,c,'gangInvite',{target='b'}); s=NST.apply(s,b,'gangAccept',{gang=s.players.a.gang})
 c.pos=NSTConfig.hideouts.davis.pos; s=NST.apply(s,c,'hideoutBuy',{id='davis'})
 s=NST.apply(s,c,'gangDeposit',{amount=500}); reject(s,b,'gangWithdraw',{amount=1})
-s=NST.apply(s,c,'gangRole',{target='b',role='officer'}); s=NST.apply(s,b,'gangWithdraw',{amount=100}); assert(s.gangs.a.bank==400)
+s=NST.apply(s,c,'gangRole',{target='b',role='officer'}); s=NST.apply(s,b,'gangWithdraw',{amount=100}); assert(s.gangs[s.players.a.gang].bank==400)
 -- Copy/commit semantics prevent partial debit on failed storage/capacity.
-s.gangs.a.items.stolen=5; s.players.b.items.bat=80
-reject(s,b,'hideoutTake',{item='stolen',amount=1}); assert(s.gangs.a.items.stolen==5)
+s.gangs[s.players.a.gang].items.stolen=5; s.players.b.items.bat=80
+reject(s,b,'hideoutTake',{item='stolen',amount=1}); assert(s.gangs[s.players.a.gang].items.stolen==5)
 s.players.b.items={}; s=NST.apply(s,b,'hideoutTake',{item='stolen',amount=5})
 reject(s,c,'hideoutTake',{item='stolen',amount=5}); assert(s.players.b.items.stolen==5)
 s.hideouts.davis.raid={}; reject(s,c,'gangWithdraw',{amount=1}); reject(s,b,'hideoutStore',{item='stolen',amount=1})
@@ -39,5 +39,14 @@ reject(s,c,'territoryStart',{id='davis'})
 s.players.outsider.role='criminal'; s.players.outsider.gang='rival'; s.gangs.rival={members={outsider='leader'},score=0}
 c.online.outsider={pos=NSTConfig.fence,alive=true}; s=NST.apply(s,c,'territoryStart',{id='davis'})
 for i=1,NSTConfig.captureSeconds do c.now=c.now+1; NST.gameTick(s,c) end
-assert(s.territories.davis.owner=='a' and s.gangs.a.score==25)
+assert(s.territories.davis.owner==s.players.a.gang and s.gangs[s.players.a.gang].score==25)
 print('gameplay_spec: robbery replay, continuity, disconnect, fence, authorization, atomic storage, raid lock, territory passed')
+-- Membership cannot churn and territory recapture cannot repeat season points.
+reject(s,b,'gangLeave',{})
+c.now=c.now+NSTConfig.captureCooldown+1;s.territories.davis.owner='rival'
+s=NST.apply(s,c,'territoryStart',{id='davis'})
+for i=1,NSTConfig.captureSeconds do c.now=c.now+1;NST.gameTick(s,c) end
+assert(s.gangs[s.players.a.gang].score==25)
+local own=s.players.a.gang;s.territories.davis.owner='rival';s.territories.davis.cooldown=0;c.online.outsider=nil
+reject(s,c,'territoryStart',{id='davis'})
+assert(not own:find('license:',1,true))

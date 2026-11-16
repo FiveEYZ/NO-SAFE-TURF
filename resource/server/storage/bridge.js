@@ -1,4 +1,5 @@
 'use strict';
+const L=require('./locale_en');
 // Local server export only. No HTTP listener or client network event is exposed.
 function createBridge(store, initializeOptions={}) {
   let initialized = false, initializing = null, stopped = false;
@@ -11,11 +12,11 @@ function createBridge(store, initializeOptions={}) {
   }
   async function request(route, method='GET', body='') {
     try {
-      if (typeof body !== 'string' || Buffer.byteLength(body)>4500000) return {code:413,data:{error:'Invalid body size'}};
+      if (typeof body !== 'string' || Buffer.byteLength(body)>4500000) return {code:413,data:{error:L.body}};
       const payload = body ? JSON.parse(body) : {};
-      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return {code:400,data:{error:'Invalid request'}};
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return {code:400,data:{error:L.request}};
       if (!((route==='/state' && method==='GET') || (route==='/commit' && method==='POST') || (route==='/wipe' && method==='POST'))) {
-        return {code:404,data:{error:'Unknown storage operation'}};
+        return {code:404,data:{error:L.operation}};
       }
       await ready();
       let data;
@@ -24,10 +25,11 @@ function createBridge(store, initializeOptions={}) {
       else data=await store.wipe(payload.key,payload.dryRun ?? false);
       return {code:200,data};
     } catch (error) {
-      if (error?.code==='CONFLICT') return {code:409,data:{error:'Stale revision; reload state'}};
-      if (error?.code==='VALIDATION' || error instanceof SyntaxError) return {code:400,data:{error:'Invalid state or operation'}};
+      if (error?.code==='CONFLICT') return {code:409,data:{error:L.conflict}};
+      if (error?.code==='BACKUP_UNAVAILABLE') return {code:503,data:{error:L.backup}};
+      if (error?.code==='VALIDATION' || error instanceof SyntaxError) return {code:400,data:{error:L.invalid}};
       // A failure may occur after commit; the caller must reconcile before retry.
-      return {code:503,data:{error:'Storage unavailable; reload state before retry'}};
+      return {code:503,data:{error:L.unavailable}};
     }
   }
   return {request, ready, stop:async()=>{stopped=true;await store.close();}};

@@ -5,6 +5,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {MariaDBStore, Conflict} = require('../resource/server/storage/store');
 const {Schedule} = require('../resource/server/storage/schedule');
+const {createBackupWriter}=require('../resource/server/storage/backup');
+const {createOxPool}=require('../resource/server/storage/oxmysql');
 const schemaSql = fs.readFileSync(path.join(__dirname,'../database/mariadb/001_initial.sql'),'utf8');
 const clone = value => JSON.parse(JSON.stringify(value));
 
@@ -18,7 +20,8 @@ async function runIntegration({mysql,config,admin,output}) {
       await admin.query('CREATE DATABASE '+database+' CHARACTER SET utf8mb4 COLLATE utf8mb4_bin');
       const pool=mysql.createPool({...config,database,connectionLimit:4,charset:'utf8mb4',supportBigNumbers:true,bigNumberStrings:false});
       pools.push(pool);
-      const store=new MariaDBStore({pool,schedule:new Schedule(),clock:()=>clock.now});
+      await pool.query(fs.readFileSync(path.join(__dirname,'../database/mariadb/000_recipe_preflight.sql'),'utf8'));
+      const store=new MariaDBStore({pool,schedule:new Schedule(),clock:()=>clock.now,backupWriter:createBackupWriter(output,'verified-backups')});
       await store.initialize({createSchema:true,schemaSql});
       return {database,pool,store};
     }
@@ -38,6 +41,59 @@ async function runIntegration({mysql,config,admin,output}) {
     return store.commit(initial.revision,initial.state,{action:'seed',actor:'test'});
   }
   const rejectedConflict = error => error instanceof Conflict || error.code==='CONFLICT';
+  await test('fresh-install SQL guard rejects existing NST schema without changing data',async({pool,store})=>{
+    const before=await seed(store);
+    await assert.rejects(()=>pool.query(fs.readFileSync(path.join(__dirname,'../database/mariadb/000_recipe_preflight.sql'),'utf8')));
+    assert.deepEqual(await store.state(),before);
+  });
+
+  await test('oxmysql transport contract over live MariaDB commits, rolls back and restores',async({pool,clock,fresh})=>{
+    const api={query_async:async(sql,args)=>(await pool.query(sql,args))[0],startTransaction:async cb=>{
+      const c=await pool.getConnection();try{await c.beginTransaction();const ok=await cb(async(sql,args)=>(await c.query(sql,args))[0]);if(ok===false){await c.rollback();return false;}await c.commit();return true;}catch(e){await c.rollback();throw e;}finally{c.release();}
+    }};
+    const transport=createOxPool(api,fn=>setImmediate(fn));
+    const store=new MariaDBStore({pool:transport,schedule:new Schedule(),clock:()=>clock.now,backupWriter:createBackupWriter(output,'ox-backups')});
+    await store.initialize();const before=await seed(store);
+    await assert.rejects(()=>store.commit(0,before.state,{}),rejectedConflict);
+    assert.deepEqual(await store.state(),before);
+    const wiped=await store.wipe('ox-contract');const archive=await store.exportBackup(wiped.backup);
+    const target=await fresh();await target.store.restoreArchive(archive,{reschedule:true});assert.deepEqual((await target.store.state()).state,before.state);
+    await transport.end();
+  });
+
+  await test('backup failure blocks manual and scheduled wipe without changing state',async({store,pool,clock})=>{
+    const before=await seed(store); const writer=store.backupWriter;
+    store.backupWriter=async()=>{throw new Error('Test disk unavailable');};
+    await assert.rejects(()=>store.wipe('failed-backup'),e=>e.code==='BACKUP_UNAVAILABLE');
+    assert.deepEqual(await store.state(),before);
+    const [[row]]=await pool.query('SELECT COUNT(*) AS n FROM nst_backups');assert.equal(Number(row.n),0);
+    clock.now=before.nextWipe;
+    await assert.rejects(()=>store.state(),e=>e.code==='BACKUP_UNAVAILABLE');
+    const [[meta]]=await pool.query('SELECT revision,season FROM nst_meta');assert.equal(Number(meta.revision),before.revision);assert.equal(Number(meta.season),before.state.season);
+    store.backupWriter=writer;assert.equal((await store.state()).state.season,before.state.season+1);
+  });
+
+  await test('verified on-disk archive restores independently of original database',async({store,fresh})=>{
+    const before=await seed(store);const result=await store.wipe('disk-restore');
+    const filename=fs.readdirSync(path.join(output,'verified-backups')).find(f=>f.startsWith(result.backup+'-')&&f.endsWith('.backup.json'));
+    assert(filename);const archive=JSON.parse(fs.readFileSync(path.join(output,'verified-backups',filename),'utf8'));
+    const target=await fresh();await target.store.restoreArchive(archive,{reschedule:true});
+    assert.deepEqual((await target.store.state()).state,before.state);
+  });
+
+  await test('connection loss before commit rolls back and pool reconnects',async({store,pool})=>{
+    const before=await seed(store);const next=clone(before.state);next.players.a.cash+=100;
+    const original=store.write.bind(store);
+    store.write=async(connection,old,value)=>{
+      await original(connection,old,value);
+      const [[row]]=await connection.query('SELECT CONNECTION_ID() AS id');
+      await admin.query('KILL CONNECTION '+Number(row.id));
+    };
+    await assert.rejects(()=>store.commit(before.revision,next,{action:'network-failure'}));
+    store.write=original;
+    assert.deepEqual(await store.state(),before);
+    assert.equal((await store.commit(before.revision,next,{action:'reconnected'})).state.players.a.cash,before.state.players.a.cash+100);
+  });
 
   await test('recipe bootstrap requires empty tables and preserves an existing deadline',async({store,pool})=>{
     const before=await store.state();
@@ -50,6 +106,7 @@ async function runIntegration({mysql,config,admin,output}) {
     await seed(store);
     await pool.query('DELETE FROM nst_meta');
     await assert.rejects(()=>store.initialize({seedMissingMeta:true}),/occupied/);
+    await assert.rejects(()=>store.initialize({createSchema:true,schemaSql}),/occupied/);
     const [[row]]=await pool.query('SELECT COUNT(*) AS n FROM nst_meta');assert.equal(Number(row.n),0);
   });
 
@@ -112,7 +169,7 @@ async function runIntegration({mysql,config,admin,output}) {
       store.failpoint=point=>{if(point===stage)throw new Error('simulated process failure');};
       await assert.rejects(()=>store.wipe(stage),/simulated process failure/);
       store.failpoint=null;
-      const reopened=new MariaDBStore({pool,schedule:new Schedule(),clock:()=>clock.now});await reopened.initialize();
+      const reopened=new MariaDBStore({pool,schedule:new Schedule(),clock:()=>clock.now,backupWriter:createBackupWriter(output,'verified-backups')});await reopened.initialize();
       await reopened.wipe(stage);
       assert.equal((await reopened.state()).state.season,before.state.season+1);
       assert.equal((await reopened.wipe(stage)).alreadyDone,true);

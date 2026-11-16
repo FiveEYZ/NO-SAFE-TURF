@@ -2,6 +2,7 @@
 
 // Server-only MariaDB storage. No credentials, FiveM natives or network events here.
 const crypto = require('node:crypto');
+const {BackupError} = require('./backup');
 const TABLES = Object.freeze(['players', 'gangs', 'territories', 'robberies', 'hideouts', 'drops', 'alerts']);
 const PERSISTENT = Object.freeze({
   accounts: ['identifier', 'admin', 'settings'],
@@ -86,11 +87,37 @@ function parseObject(text, label) {
   return value;
 }
 
+function verifyArchive(archive) {
+  check(record(archive) && archive.format === 1 && Array.isArray(archive.backups), 'Invalid backup archive');
+  const backups = new Map();
+  for (const row of archive.backups) {
+    check(record(row) && typeof row.payload === 'string' && digest(row.payload) === row.sha256 && !backups.has(row.backup_id), 'Backup integrity check failed');
+    identifier(row.backup_id); integer(row.created_at, 'backup timestamp'); integer(row.revision, 'backup revision');
+    backups.set(row.backup_id, row);
+  }
+  const root = backups.get(archive.root);
+  check(root, 'Root backup missing');
+  const snapshot = parseObject(root.payload, 'backup');
+  check(snapshot.format === 1 && record(snapshot.tables) && encode(Object.keys(snapshot.tables).sort()) === encode(Object.keys(PERSISTENT).sort()), 'Unsupported backup payload');
+  check(record(snapshot.envelope), 'Invalid backup envelope');
+  const state = normalize(snapshot.envelope.state);
+  const revision = integer(snapshot.envelope.revision, 'backup revision');
+  check(revision < Number.MAX_SAFE_INTEGER && revision === integer(root.revision, 'backup revision'), 'Invalid backup revision');
+  const nextWipe = integer(snapshot.envelope.nextWipe, 'backup deadline');
+  for (const [name, columns] of Object.entries(PERSISTENT)) {
+    check(Array.isArray(snapshot.tables[name]), 'Invalid backup table');
+    for (const row of snapshot.tables[name]) check(record(row) && columns.every(column => own(row, column)), 'Invalid backup row');
+  }
+  for (const row of snapshot.tables.wipes) check(row.backup_id !== archive.root && backups.has(row.backup_id), 'Referenced backup missing');
+  return {backups, state, revision, nextWipe, tables: snapshot.tables};
+}
+
 class MariaDBStore {
-  constructor({pool, schedule, clock = () => Math.floor(Date.now() / 1000), failpoint = null, schema = null}) {
+  constructor({pool, schedule, clock = () => Math.floor(Date.now() / 1000), failpoint = null, schema = null, backupWriter = null}) {
     check(pool && typeof pool.getConnection === 'function', 'A MariaDB connection pool is required');
     check(schedule && typeof schedule.nextAfter === 'function', 'A wipe schedule is required');
     this.pool = pool; this.schedule = schedule; this.clock = clock; this.failpoint = failpoint; this.schema = schema;
+    this.backupWriter = backupWriter;
   }
   now() { return integer(this.clock(), 'clock'); }
   nextWipe(now) { const due = integer(this.schedule.nextAfter(now), 'wipe deadline'); check(due > now, 'Wipe deadline must be in the future'); return due; }
@@ -110,12 +137,11 @@ class MariaDBStore {
         // This is the bundled, reviewed v1 migration, not arbitrary client input.
         const statements = sql.split(/\r?\n/).filter(line => !line.trimStart().startsWith('--')).join('\n').split(';');
         for (const statement of statements) if (statement.trim()) await connection.query(statement);
-        await connection.query("INSERT IGNORE INTO nst_meta(id,revision,season,next_wipe,extra) VALUES(1,0,1,?,'{}')", [this.nextWipe(this.now())]);
       }
       const [migrations] = await connection.query('SELECT version FROM nst_schema_migrations ORDER BY version');
       check(migrations.length === 1 && Number(migrations[0].version) === 1, 'Unsupported MariaDB schema version');
       let [meta] = await connection.query('SELECT id FROM nst_meta WHERE id=1');
-      if (!meta.length && seedMissingMeta) {
+      if (!meta.length && (seedMissingMeta || createSchema)) {
         // Recipe imports the schema; only an empty installation may get its first season.
         for (const name of [...TABLES, 'player_items', 'gang_items', ...Object.keys(PERSISTENT), 'backups']) {
           const [[row]] = await connection.query('SELECT COUNT(*) AS n FROM nst_'+name);
@@ -196,6 +222,7 @@ class MariaDBStore {
   async wipeLocked(connection, meta, key) {
     const [existing] = await connection.query('SELECT backup_id FROM nst_wipes WHERE wipe_key=?', [key]);
     if (existing.length) return {...await this.read(connection, meta), alreadyDone: true, backup: existing[0].backup_id};
+    if (!this.backupWriter) throw new BackupError();
     check(meta.revision < Number.MAX_SAFE_INTEGER && meta.season < Number.MAX_SAFE_INTEGER, 'Season counters exhausted');
     const snapshot = await this.read(connection, meta), tables = {};
     for (const [name, columns] of Object.entries(PERSISTENT)) {
@@ -204,8 +231,15 @@ class MariaDBStore {
     }
     const payload = encode({format: 1, envelope: snapshot, tables});
     const backupId = digest(key + ':' + meta.revision);
-    await connection.query('INSERT INTO nst_backups(backup_id,created_at,revision,payload,sha256) VALUES(?,?,?,?,?)',
-      [backupId, this.now(), meta.revision, payload, digest(payload)]);
+    try {
+      await connection.query('INSERT INTO nst_backups(backup_id,created_at,revision,payload,sha256) VALUES(?,?,?,?,?)',
+        [backupId, this.now(), meta.revision, payload, digest(payload)]);
+      const archive = await this.readArchive(connection, backupId);
+      check(archive.backups[0].payload === payload, 'Stored backup differs from locked state');
+      await this.backupWriter(archive);
+    } catch {
+      throw new BackupError();
+    }
     await this.fail('after_backup');
     const old = snapshot.state;
     const rankings = Object.entries(old.gangs).map(([gang, value]) => ({gang, name: value.name ?? gang, score: value.score ?? 0})).sort((a, b) => b.score - a.score);
@@ -243,57 +277,45 @@ class MariaDBStore {
   }
   async exportBackup(backupId) {
     identifier(backupId);
-    return this.transaction(async (connection) => {
-      const [roots] = await connection.query('SELECT * FROM nst_backups WHERE backup_id=?', [backupId]);
-      check(roots.length === 1, 'Backup not found');
-      const root = Object.fromEntries(BACKUP_COLUMNS.map(key => [key, roots[0][key]]));
-      check(digest(root.payload) === root.sha256, 'Stored backup integrity check failed');
-      const document = parseObject(root.payload, 'backup');
-      check(document.format === 1 && Array.isArray(document.tables?.wipes), 'Unsupported backup payload');
-      const references = new Set(document.tables.wipes.map(row => row.backup_id));
-      const backups = [root];
-      references.delete(backupId);
-      for (const key of [...references].sort()) {
-        const [rows] = await connection.query('SELECT * FROM nst_backups WHERE backup_id=?', [key]);
-        check(rows.length === 1 && digest(rows[0].payload) === rows[0].sha256, 'Referenced backup missing or corrupt');
-        backups.push(Object.fromEntries(BACKUP_COLUMNS.map(column => [column, rows[0][column]])));
-      }
-      return {format: 1, root: backupId, backups};
-    });
+    return this.transaction(connection => this.readArchive(connection, backupId));
+  }
+
+  async readArchive(connection, backupId) {
+    const [roots] = await connection.query('SELECT * FROM nst_backups WHERE backup_id=?', [backupId]);
+    check(roots.length === 1, 'Backup not found');
+    const root = Object.fromEntries(BACKUP_COLUMNS.map(key => [key, roots[0][key]]));
+    check(digest(root.payload) === root.sha256, 'Stored backup integrity check failed');
+    const document = parseObject(root.payload, 'backup');
+    check(document.format === 1 && Array.isArray(document.tables?.wipes), 'Unsupported backup payload');
+    const references = new Set(document.tables.wipes.map(row => row.backup_id));
+    const backups = [root];
+    references.delete(backupId);
+    for (const key of [...references].sort()) {
+      const [rows] = await connection.query('SELECT * FROM nst_backups WHERE backup_id=?', [key]);
+      check(rows.length === 1, 'Referenced backup missing');
+      backups.push(Object.fromEntries(BACKUP_COLUMNS.map(column => [column, rows[0][column]])));
+    }
+    const archive = {format: 1, root: backupId, backups};
+    verifyArchive(archive);
+    return archive;
   }
   async restoreArchive(archive, {reschedule = false} = {}) {
-    check(record(archive) && archive.format === 1 && Array.isArray(archive.backups) && typeof reschedule === 'boolean', 'Invalid backup archive');
-    const backups = new Map();
-    for (const row of archive.backups) {
-      check(record(row) && typeof row.payload === 'string' && digest(row.payload) === row.sha256 && !backups.has(row.backup_id), 'Backup integrity check failed');
-      identifier(row.backup_id); integer(row.created_at, 'backup timestamp'); integer(row.revision, 'backup revision');
-      backups.set(row.backup_id, row);
-    }
-    check(backups.has(archive.root), 'Root backup missing');
-    const snapshot = parseObject(backups.get(archive.root).payload, 'backup');
-    check(snapshot.format === 1 && record(snapshot.tables) && encode(Object.keys(snapshot.tables).sort()) === encode(Object.keys(PERSISTENT).sort()), 'Unsupported backup payload');
-    check(record(snapshot.envelope), 'Invalid backup envelope');
-    const restored = normalize(snapshot.envelope.state);
-    const revision = integer(snapshot.envelope.revision, 'backup revision') + 1;
-    check(Number.isSafeInteger(revision), 'Backup revision exhausted');
-    const archivedDue = integer(snapshot.envelope.nextWipe, 'backup deadline');
-    for (const [name, columns] of Object.entries(PERSISTENT)) {
-      check(Array.isArray(snapshot.tables[name]), 'Invalid backup table');
-      for (const row of snapshot.tables[name]) check(record(row) && columns.every(column => own(row, column)), 'Invalid backup row');
-    }
-    for (const row of snapshot.tables.wipes) check(backups.has(row.backup_id), 'Referenced backup missing');
+    check(typeof reschedule === 'boolean', 'Invalid backup archive');
+    const verified = verifyArchive(archive);
+    const {backups, state: restored, tables} = verified;
+    const revision = verified.revision + 1;
     return this.transaction(async (connection, meta) => {
       check(meta.revision === 0 && meta.season === 1, 'Restore requires a fresh initialized database');
-      for (const name of [...TABLES, ...Object.keys(PERSISTENT), 'backups']) {
+      for (const name of [...TABLES, 'player_items', 'gang_items', ...Object.keys(PERSISTENT), 'backups']) {
         const [rows] = await connection.query(`SELECT COUNT(*) AS n FROM nst_${name}`);
         check(Number(rows[0].n) === 0, 'Restore destination is not empty');
       }
       await this.write(connection, emptyState(), restored);
       for (const row of backups.values()) await connection.query('INSERT INTO nst_backups(backup_id,created_at,revision,payload,sha256) VALUES(?,?,?,?,?)', BACKUP_COLUMNS.map(key => row[key]));
       for (const [name, columns] of Object.entries(PERSISTENT)) {
-        for (const row of snapshot.tables[name]) await connection.query(`INSERT INTO nst_${name}(${columns.join(',')}) VALUES(${columns.map(() => '?').join(',')})`, columns.map(column => row[column]));
+        for (const row of tables[name]) await connection.query(`INSERT INTO nst_${name}(${columns.join(',')}) VALUES(${columns.map(() => '?').join(',')})`, columns.map(column => row[column]));
       }
-      const due = reschedule ? this.nextWipe(this.now()) : archivedDue;
+      const due = reschedule ? this.nextWipe(this.now()) : verified.nextWipe;
       await connection.query('UPDATE nst_meta SET revision=?,next_wipe=? WHERE id=1', [revision, due]);
       await this.audit(connection, reschedule ? 'restore_reschedule' : 'restore', 'offline-admin', revision);
       return this.read(connection, {...meta, revision, season: restored.season, next_wipe: due, extra: encode(extraOf(restored))});

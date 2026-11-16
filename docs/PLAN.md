@@ -1,28 +1,25 @@
-# NO SAFE TURF — first version
+# Architecture and delivery plan · 0.3.0
 
-2026-11-15. The workspace was empty; no AGENTS.md files were found in the directory or its parent directories.
+Continue the existing project; retain standalone Lua rules and prebuilt NUI. Runtime data access now uses pinned oxmysql 2.14.3 through a server-local JavaScript adapter. MariaDB v1 schema, per-entity/item rows and global revision lock are preserved. No destructive schema migration is required by this update.
 
-Standalone Lua was selected to avoid framework migration and paid assets. NUI uses plain HTML/CSS/JS. Server-side JavaScript inside FiveM uses MariaDB with transactions, revision checks and pre-wipe backups. The server serializes gameplay commands; state is published only after storage. The snapshot model targets 16–32 players and has not been verified for larger loads.
+## Implemented requirement changes
 
-2026-11-16 deployment update: the target is self-hosted txAdmin plus MariaDB. The local server export now uses MariaDB with InnoDB, entity-separated rows, normalized player/gang item rows, and updates limited to changed rows. Python/SQLite remain optional development/reference code, excluded from the deployment package. The global revision lock remains because the Lua API still submits shared-state transitions. MariaDB schema initialization and restore are explicit offline operations. See [deployment guide](MARIADB.md).
+1. Added AGENTS.md and explicit ownership. Three Sol High agents handled gameplay, police and infrastructure; usage limits interrupted them. Lead completed integration. Astra High reviewed critical code; Luna Medium handled bounded documentation.
+2. Moved runtime database access to the maintained oxmysql resource, retained mysql2 only for offline tools/tests, validated txAdmin URL handoff and added startup ordering.
+3. Made verified, synced filesystem archives a condition for wipe. Backup failure aborts SQL reset; real archive restore and connection loss/reconnection are tested.
+4. Added English locale files for Lua and storage messages, preserved built NUI and blocked opening over another NUI's focus.
+5. Added trusted txAdmin revive and administrative-disconnect handling; fixed delayed reconciliation of committed respawn/wipe effects.
+6. Added membership cooldown, opaque new gang IDs, online-defender territory rules and one score award per gang/zone/season.
+7. Replaced maintained Python tests with Node/Wasmoon Lua 5.4. Locked and downloaded recipe dependencies; prepared release and English operations/upgrade instructions.
 
-## File ownership and interfaces
+## Interfaces
 
-- Lead agent: core/main, client, NUI, manifest, installation, and integration tests.
-- Gameplay agent: gameplay.lua, config.lua, gameplay_spec.lua, GAMEPLAY.md.
-- Police agent: police.lua, police_spec.lua, POLICE.md.
-- Infrastructure agent: service/, test_service.py, OPERATIONS.md.
+NST.handlers[action](state,context,args) are non-yielding authoritative transitions. Context identity/time/position/police count comes from server observation. A state copy is published only after persistence. Client input cannot supply balances, rewards or privileges.
 
-Gameplay and police modules register pure `NST.handlers[action](state,context,args)` functions. Context contains server-derived identity, time, position, and connected players. An error discards the entire state copy. Handlers must not yield. The JavaScript storage adapter checks the revision and writes state and audit records atomically. Identity uses the license identifier, never a reusable connection number. Data sent to NUI is filtered per player.
+Storage uses revision/state/nextWipe envelopes and local server exports only. An uncertain write outcome is reloaded before accepting another state; persisted serial effects are reconciled against the previous envelope. Wipes hold the database metadata lock, require verified archive creation and atomically commit season/history/ledger changes.
 
-## Delivery order
+## Remaining acceptance
 
-1. Resource, core, database, and API.
-2. Robbery → stolen goods → fence/hideout storage.
-3. Gangs, police, arrests, and death.
-4. Hideouts, raids, and territories.
-5. Wipes, history, backups, and administration.
-6. Cross-review, actual local tests, and a manual two-client protocol.
+All independent local implementation and test preparation is complete. Do not claim actual runtime acceptance: reachable approved publication, a selected Enhanced artifact/key, fresh external test database and two licensed clients are required to run txAdmin deployment, TLS/grants, Cfx export/native tests and gameplay. Capacity remains a 16–32-player target requiring profiling.
 
-All coordinates and balance values are initial test values. No public server is opened. No custom streamed maps or models are required. GTA/FXServer testing, checking positions in the game, and load testing are separate acceptance gates. English is the default project and interface language; the wipe schedule retains the Europe/Stockholm time zone.
-
+Sources, exact checks and limitations are in COMPATIBILITY.md, TESTING.md, REQUIREMENTS.md and LIMITATIONS.md. Source ownership and test commands are maintained in ../AGENTS.md.

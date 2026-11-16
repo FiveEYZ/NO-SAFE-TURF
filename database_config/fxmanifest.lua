@@ -1,0 +1,5 @@
+fx_version 'cerulean'
+game 'gta5'
+node_version '22'
+description 'NO SAFE TURF private oxmysql configuration'
+server_script 'server.js'

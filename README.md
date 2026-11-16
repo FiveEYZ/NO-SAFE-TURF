@@ -1,28 +1,27 @@
-# NO SAFE TURF · 0.2.1
+# NO SAFE TURF · 0.3.0
 
-Standalone FiveM resource: robberies, gangs, shared storage, player police, arrests, death loot, hideouts, raids, territories and weekly seasons. Open the English interface with F6 or /nst.
-
-**Python is not required to run the mod.** Lua gameplay calls server-side JavaScript inside FiveM, which connects directly to MariaDB. txAdmin starts and stops the resource. There is no separate storage service or HTTP port.
+Standalone English crime/survival for FiveM Enhanced: two robberies, gangs, shared cash/storage, player police, arrests, death loot, hideouts, raids, territories and weekly seasons. Open F6 or /nst.
 
 ## Installation
 
-For automated setup, use the [txAdmin recipe guide](docs/TXADMIN_RECIPE.md) and root recipe.yaml. Publish the matching release asset first.
+Use [the txAdmin recipe guide](docs/TXADMIN_RECIPE.md) for a new test profile, or [external MariaDB/manual installation](docs/MARIADB.md) for a pre-created database or existing server. Runtime requires external MariaDB 10.11+, oxmysql 2.14.3, embedded Node 22, OneSync and the matching Enhanced client/server. No Python, paid resources or frontend build is required.
 
-Follow [the txAdmin and MariaDB guide](docs/MARIADB.md). Copy the packaged resource including its dependencies, transfer the private database configuration separately, initialize the dedicated schema explicitly and merge the txAdmin configuration fragment.
+The recipe target is the user-provided FiveEYZ/NO-SAFE-TURF repository. The main-branch raw recipe and v0.3.0 asset returned HTTP 404 on 2026-11-16. Files are prepared locally; nothing was published. Publish only after explicit owner approval. URL installation is not verified.
 
-Requirements: an appropriate FiveM Enhanced artifact with Node 22 support, OneSync, the base map/session/spawn resources, licensed GTA V Enhanced clients and MariaDB 10.11+. Optional offline database tools require Node 22+ on the administrator computer. The packaged game server uses FiveM's embedded Node runtime.
+## Current evidence
 
-## Verification
+npm test runs JavaScript/NUI/config/transport checks and five Lua 5.4 suites via Wasmoon without Python. Fifteen disposable MariaDB integration cases pass, including failed backup, file restore, connection loss/reconnection and the oxmysql transport contract. These do not execute oxmysql inside Cfx.
 
-Local JavaScript, Lua, UI and isolated MariaDB checks pass. Actual FiveM startup, Lua/JavaScript interoperation in Cfx and Enhanced multiplayer still require the [two-client protocol](docs/TESTING.md). 16–32 players is a target, not measured capacity. Combat currently uses fists, bats and police batons.
+Actual Enhanced startup, txAdmin Server Deployer, external-host TLS/grants, two-client gameplay and 16–32-player capacity remain unverified. Read [requirements status](docs/REQUIREMENTS.md), [test protocol](docs/TESTING.md) and [limitations](docs/LIMITATIONS.md).
 
-Run node tests/run_node.js for JavaScript checks. Run node tests/run_mariadb_node.js for isolated Windows database tests with the portable fixture installed. The retained Python service/tests are development/reference only and excluded from the deployment package.
+## Development
 
-## Playing and administration
+Install Node 22+ and PowerShell 7. Run npm ci --ignore-scripts in the root, then npm ci --omit=dev --ignore-scripts --prefix resource for the offline database tools. Run npm test. The UI is plain HTML/CSS/JavaScript: source files in resource/web are the final runtime files; no bundler is needed.
 
-Start with a store robbery, sell stolen goods to the fence and save for a gang and hideout. The depot requires a police officer and a lockpick. GPS buttons and blips show locations.
+npm run test:database uses an optional disposable Windows MariaDB fixture under .testtools, never deployment credentials. tools/package.ps1 builds secret-screened archives. Legacy Python reference files remain in the working repository but are not part of the maintained build/test flow or release.
 
-Console: nst_db_status. Console or ACE nst.admin: nst_status, nst_wipe dryrun test-01, nst_wipe execute test-01. Execute resets seasonal data; use only on the intended database. Default schedule: Sunday 04:00 Europe/Stockholm.
+## Administration
 
-[Gameplay](docs/GAMEPLAY.md) · [Police](docs/POLICE.md) · [Operations](docs/OPERATIONS.md) · [Compatibility](docs/COMPATIBILITY.md) · [Limitations](docs/LIMITATIONS.md) · [Architecture](docs/PLAN.md) · [License](LICENSE)
+Console: nst_db_status and nst_status. Console or ACE nst.admin: nst_wipe dryrun UNIQUE_KEY and nst_wipe execute UNIQUE_KEY. Default wipe: Sunday 04:00 Europe/Stockholm. Destructive wipe requires a synced, read-back-verified external-to-database archive. Missing/unwritable backup storage blocks the wipe and overdue economy.
 
+[Gameplay](docs/GAMEPLAY.md) · [Police](docs/POLICE.md) · [Operations](docs/OPERATIONS.md) · [Upgrades](docs/UPGRADING.md) · [Compatibility/licenses](docs/COMPATIBILITY.md) · [Agent instructions](AGENTS.md)

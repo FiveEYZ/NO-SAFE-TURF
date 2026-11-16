@@ -13,11 +13,11 @@ No GTA client, Cfx server key, or Enhanced server installation has been configur
 - A gang leader cannot leave a gang that has other members or a purchased hideout. Leadership transfer and dissolution with asset distribution require a later version.
 - The Stockholm schedule uses the embedded Node runtime Intl time-zone data. Future changes to time-zone rules require an update and retesting. Indefinite operation without maintenance is not promised.
 - Gameplay transitions still serialize the shared game state. MariaDB stores separate entities/inventory rows and writes only changes; it retains a global revision lock and reconstructs snapshots on reads. Data volume, tick latency, and operation with 16–32 players need measurement; revision conflicts reject actions and require a retry. Storage outages stop the economy. A medkit can be consumed without visible healing if the server crashes between commit and the client effect; the item is not automatically refunded.
-- MariaDB has been tested on an isolated local 11.4.5 instance, not against the deployment database, its grants, network or TLS configuration. Storage runs inside FiveM; actual Cfx Lua/JavaScript interoperability still needs verification. Existing SQLite player data is not automatically migrated. Logical backups share the database until explicitly exported; keep external server backups too.
+- MariaDB has been tested on an isolated local 11.4.5 instance, not against the deployment database, its grants, network or TLS configuration. Storage uses pinned oxmysql 2.14.3 inside FiveM; actual Cfx export interoperability still needs verification. Existing SQLite player data is not automatically migrated. Every wipe now requires a synced/read-back-verified filesystem archive; off-host copies and physical power-loss durability still need operational validation.
 - Starting cash is granted once per license per wipe. Purchased alternate accounts and cooperating rival gangs cannot be detected completely. Simply logging in provides no automatic reward.
 - The server uses replicated position/health, but teleport cheats and manipulated client physics require movement analysis and separate anticheat. Spawn protection against damage events is checked by the server; vehicle collisions/explosions need specific in-game verification.
 - Account tables and history survive wipes. ACE and Cfx/txAdmin handle active administrator/ban management; the bans SQL table is not a separately implemented connection block.
-- English frontend text is collected in locale.js; English gameplay validation messages reside in their respective Lua modules. A complete backend localization layer remains future work.
+- English frontend text is collected in locale.js; English Lua messages are in shared/server locale files; storage diagnostics have a JavaScript locale. Technical exception detail remains internal and is sanitized before display.
 - No voice integration, statistics export, performance dashboard, or web administration. Standard game assets are referenced; no third-party models are distributed.
 
 ## Next work, in order
@@ -27,4 +27,3 @@ No GTA client, Cfx server key, or Enhanced server installation has been configur
 3. Extend combat with server-accounted ammunition, vehicle damage, forced arrest, and movement validation.
 4. Add leadership transfer, better storage management, a complete localization layer, and interface testing in actual NUI.
 5. Balance-test multiple seasons, add robbery types, and improve protection against alternate accounts and coordinated farming.
-

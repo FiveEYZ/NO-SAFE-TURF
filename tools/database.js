@@ -6,6 +6,7 @@ const mysql=require('../resource/node_modules/mysql2/promise');
 const {readConfig,safeError}=require('../resource/server/storage/config');
 const {MariaDBStore}=require('../resource/server/storage/store');
 const {Schedule}=require('../resource/server/storage/schedule');
+const L=require('./locale_en');
 
 async function main() {
   const [command,...args]=process.argv.slice(2),options={};
@@ -15,7 +16,7 @@ async function main() {
     else throw new Error('Invalid arguments');
   }
   if(!['check','init','export','restore'].includes(command)) {
-    console.log('node tools/database.js check|init|export|restore --config PRIVATE_JSON [--id BACKUP_ID --file FILE] [--reschedule]');return;
+    console.log(L.usage);return;
   }
   if(!options.config) throw new Error('A private config file is required');
   if((command==='export' && (!options.id || !options.file)) || (command==='restore' && !options.file)) throw new Error('Missing backup arguments');
@@ -30,23 +31,23 @@ async function main() {
         const [[tables]]=await connection.query('SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema=DATABASE()');
         const [[meta]]=await connection.query("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='nst_meta'");
         await connection.rollback();
-        console.log('Database version:',version.version);
-        console.log('Table count:',tables.n,'; NO SAFE TURF metadata present:',Number(meta.n)>0);
-        console.log('Read-only check passed. No data changed.');
+        console.log(L.version,version.version);
+        console.log(L.tables,tables.n,L.metadata,Number(meta.n)>0);
+        console.log(L.checked);
       } finally {connection.release();}
       return;
     }
     const store=new MariaDBStore({pool,schedule});
     await store.initialize({createSchema:command==='init',schemaSql:fs.readFileSync(path.join(root,'database/mariadb/001_initial.sql'),'utf8')});
-    if(command==='init') console.log('Schema initialized. No game server started.');
+    if(command==='init') console.log(L.initialized);
     if(command==='export') {
       const archive=await store.exportBackup(options.id);
       fs.writeFileSync(options.file,JSON.stringify(archive),{encoding:'utf8',flag:'wx',mode:0o600});
-      console.log('Backup exported to a new file.');
+      console.log(L.exported);
     }
     if(command==='restore') {
       await store.restoreArchive(JSON.parse(fs.readFileSync(options.file,'utf8')),{reschedule:options.reschedule??false});
-      console.log('Backup restored to the empty destination database.');
+      console.log(L.restored);
     }
   } finally {await pool.end();}
 }

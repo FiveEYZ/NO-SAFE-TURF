@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$releaseName = 'no-safe-turf-0.2.1-' + (Get-Date -Format 'yyyyMMdd-HHmmss')
+$releaseName = 'no-safe-turf-0.3.0-' + (Get-Date -Format 'yyyyMMdd-HHmmss')
 $releaseRoot = Join-Path $projectRoot ('dist/' + $releaseName)
 New-Item -ItemType Directory -Path $releaseRoot | Out-Null
 function Copy-ReleaseFile([string]$relative) {
@@ -9,12 +9,17 @@ function Copy-ReleaseFile([string]$relative) {
     New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
     Copy-Item -LiteralPath $source -Destination $target
 }
-foreach ($relative in @('README.md','LICENSE','recipe.yaml','server.example.cfg','secrets.example.cfg','deploy/recipe-server.cfg','deploy/txadmin-resource.cfg','deploy/mariadb.example.json','tools/database.js','database/mariadb/001_initial.sql')) {
+foreach ($relative in @('README.md','LICENSE','AGENTS.md','package.json','package-lock.json','recipe.yaml','server.example.cfg','secrets.example.cfg','deploy/recipe-server.cfg','deploy/txadmin-resource.cfg','deploy/mariadb.example.json','tools/database.js','database/mariadb/000_recipe_preflight.sql','database/mariadb/001_initial.sql')) {
     Copy-ReleaseFile $relative
 }
-foreach ($directory in @('resource','docs')) {
+foreach ($directory in @('resource','database_config','docs','tests','tools')) {
     foreach ($file in Get-ChildItem -LiteralPath (Join-Path $projectRoot $directory) -File -Recurse) {
-        if ($file.Name -match '\.private\.|\.py[c]?$|^\.env$') { continue }
+        if ($file.Name -match '\.private\.|\.py[c]?$|^\.env$|\.backup\.json(?:\.pending)?$') { continue }
+        if ($directory -eq 'docs' -and $file.Name -eq 'promt.md') { continue } # Preserve the user's Swedish prompt locally, not in English delivery.
+        if ($directory -eq 'resource') {
+            $relativeResource = [IO.Path]::GetRelativePath((Join-Path $projectRoot 'resource'),$file.FullName).Replace('\','/')
+            if ($relativeResource -notmatch '^((client|server|shared)/.*\.(lua|js)$|web/.*\.(html|css|js)$|node_modules/|fxmanifest\.lua$|package(?:-lock)?\.json$)') { continue }
+        }
         Copy-ReleaseFile ([IO.Path]::GetRelativePath($projectRoot,$file.FullName))
     }
 }
@@ -31,7 +36,7 @@ Compress-Archive -LiteralPath $releaseRoot -DestinationPath $archive
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zip = [IO.Compression.ZipFile]::OpenRead($archive)
 try {
-    if ($zip.Entries.FullName -match '\.private\.|\.py[c]?$|/service/') { throw 'Excluded content detected in archive.' }
+    if ($zip.Entries.FullName -match '\.private\.|\.py[c]?$|/service/|\.backup\.json') { throw 'Excluded content detected in archive.' }
     Write-Output ('Verified archive entries: ' + $zip.Entries.Count)
 } finally { $zip.Dispose() }
 Get-FileHash -LiteralPath $archive -Algorithm SHA256 | Select-Object Path,Hash
@@ -39,9 +44,9 @@ $recipeArchive = Join-Path $projectRoot 'dist/no-safe-turf-txadmin.zip'
 Compress-Archive -Path (Join-Path $releaseRoot '*') -DestinationPath $recipeArchive -Force
 $zip = [IO.Compression.ZipFile]::OpenRead($recipeArchive)
 try {
-    foreach ($required in @('resource/fxmanifest.lua','resource/node_modules/mysql2/promise.js','database/mariadb/001_initial.sql','deploy/recipe-server.cfg')) {
+    foreach ($required in @('resource/fxmanifest.lua','database_config/fxmanifest.lua','resource/node_modules/mysql2/promise.js','database/mariadb/000_recipe_preflight.sql','database/mariadb/001_initial.sql','deploy/recipe-server.cfg')) {
         if (!($zip.Entries | Where-Object { $_.FullName.Replace('\','/') -eq $required })) { throw ('Missing recipe path: '+$required) }
     }
-    if ($zip.Entries.FullName -match '\.private\.|\.py[c]?$|/service/') { throw 'Excluded content detected in recipe archive.' }
+    if ($zip.Entries.FullName -match '\.private\.|\.py[c]?$|/service/|\.backup\.json') { throw 'Excluded content detected in recipe archive.' }
     Write-Output ('Verified recipe archive: '+$recipeArchive)
 } finally { $zip.Dispose() }
