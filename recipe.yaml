@@ -1,0 +1,50 @@
+$engine: 3
+$onesync: 'on'
+name: NO SAFE TURF
+version: 0.2.1
+author: FiveEYZ
+description: Standalone English crime and survival for FiveM Enhanced. MariaDB, gangs, robberies, police and weekly seasons. No Python required.
+
+tasks:
+  - action: connect_database
+
+  # Upload the matching asset to the v0.2.1 GitHub Release before using this recipe.
+  - action: download_file
+    url: https://github.com/FiveEYZ/NO-SAFE-TURF/releases/download/v0.2.1/no-safe-turf-txadmin.zip
+    path: ./tmp/nst.zip
+  - action: unzip
+    src: ./tmp/nst.zip
+    dest: ./tmp/nst
+  - action: query_database
+    file: ./tmp/nst/database/mariadb/001_initial.sql
+
+  # Same base-resource source as the official Enhanced Basic Server recipe.
+  - action: download_github
+    src: https://github.com/citizenfx/cfx-server-data
+    ref: master
+    subpath: resources
+    dest: ./tmp/cfx
+  - action: move_path
+    src: ./tmp/cfx/[managers]/mapmanager
+    dest: ./resources/mapmanager
+  - action: move_path
+    src: ./tmp/cfx/[managers]/spawnmanager
+    dest: ./resources/spawnmanager
+  - action: move_path
+    src: ./tmp/nst/resource
+    dest: ./resources/[local]/no_safe_turf
+  - action: move_path
+    src: ./tmp/nst/deploy/recipe-server.cfg
+    dest: ./server.cfg
+  - action: move_path
+    src: ./tmp/nst/docs
+    dest: ./nst-docs
+  - action: move_path
+    src: ./tmp/nst/LICENSE
+    dest: ./NST-LICENSE
+  - action: remove_path
+    path: ./tmp/nst
+  - action: remove_path
+    path: ./tmp/cfx
+  - action: remove_path
+    path: ./tmp/nst.zip

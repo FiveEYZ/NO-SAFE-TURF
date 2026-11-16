@@ -1,0 +1,2 @@
+# Windows needs IANA time-zone data. Python itself is 3.12+ (PSF license).
+tzdata==2025.2

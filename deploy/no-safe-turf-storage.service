@@ -1,0 +1,21 @@
+# LEGACY REFERENCE ONLY: not used by v0.2; do not run beside the active resource.
+# Example Linux systemd unit. Edit paths and create the nst service account first.
+[Unit]
+Description=NO SAFE TURF storage API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nst
+WorkingDirectory=/opt/no-safe-turf
+EnvironmentFile=/etc/no-safe-turf/storage.env
+ExecStart=/opt/no-safe-turf/.venv/bin/python -m service.server --backend mariadb
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+

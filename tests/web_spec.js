@@ -1,0 +1,64 @@
+'use strict';
+// Logic/DOM-contract tests only. This is not Chromium/NUI rendering or accessibility QA.
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const calls = [], events = {}, documentEvents = {}, nodes = {};
+let document;
+class Element {
+  constructor(tag) { this.tagName=tag.toUpperCase(); this.children=[]; this.style={}; this.value=''; this.selectionStart=null; this.attributes={}; this._text=''; this.classList={toggle(){}}; }
+  set textContent(value) { this._text=String(value); this.children=[]; }
+  get textContent() { return this._text+this.children.map(n=>n.textContent).join(''); }
+  set innerHTML(_) { throw Error('Unsafe HTML sink used'); }
+  append(...children) { this.children.push(...children); }
+  replaceChildren(...children) { this.children=children; this._text=''; }
+  setAttribute(k,v) { this.attributes[k]=v; }
+  querySelectorAll(tag) { return this.children.flatMap(n=>[...(n.tagName===tag.toUpperCase()?[n]:[]),...n.querySelectorAll(tag)]); }
+  focus() { document.activeElement=this; }
+  setSelectionRange(start,end) { this.selectionStart=start; this.selectionEnd=end; }
+}
+document={activeElement:null,getElementById(id){return nodes[id] ||= new Element('div');},createElement(tag){return new Element(tag);},addEventListener(name,fn){documentEvents[name]=fn;}};
+const sandbox={document,console,GetParentResourceName:()=> 'no_safe_turf',fetch:async(url,options)=>{calls.push({url,data:JSON.parse(options.body)});return {};},setTimeout:()=>1,clearTimeout(){}};
+sandbox.window=sandbox;sandbox.addEventListener=(name,fn)=>{events[name]=fn;};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync('resource/web/locale.js','utf8'),sandbox,{filename:'locale.js'});
+vm.runInContext(fs.readFileSync('resource/web/app.js','utf8'),sandbox,{filename:'app.js'});
+const L=sandbox.L;
+const fixture={player:{cash:500,alive:true,role:'criminal',items:{stolen:6,bat:1,medkit:1},wantedUntil:0,jailUntil:0},gang:null,invites:[],people:[{id:2,name:'<img src=x onerror=evil()>'}],drops:[{id:'1'}],alerts:[{text:'<script>evil()</script>'}],territories:{davis:{owner:'Concrete',capture:{progress:50}}},hideouts:{davis:{owner:'Concrete',level:2,raid:{startsAt:1060,presence:10}}},leaderboard:[{name:'<img onerror=evil()>',score:33}],season:1,nextWipe:1800000000,now:1000,robberies:{shop:{mine:true,progress:12,cooldown:1600}}};
+const config={robberies:{shop:{label:'Store robbery',duration:45,reward:6,police:0},depot:{label:'Depot robbery',duration:100,reward:16,police:1}},prices:{bat:250,medkit:120,lockpick:90},hideouts:{davis:{label:'Davis',cost:900}},territories:{davis:{label:'Davis'}},captureSeconds:180};
+const message=m=>events.message({data:m});
+const snapshot=()=>message({type:'state',value:fixture,config});
+const button=(root,label)=>{const b=nodes[root].querySelectorAll('button').find(n=>n.textContent===label);assert(b,`Missing button: ${label}`);return b;};
+const click=(root,label)=>button(root,label).onclick();
+const switchTab=key=>click('tabs',L.tabs[key]);
+const last=()=>calls.at(-1).data;
+const input=label=>nodes.content.querySelectorAll('input').find(n=>n.attributes['aria-label']===label);
+
+async function run(){
+  message({type:'open',value:true}); assert(nodes.content.textContent.includes(L.notReady));
+  snapshot(); assert(nodes.status.textContent.includes('$500'));assert(nodes.season.textContent.includes('Stockholm'));
+  assert(nodes.content.textContent.includes('12 / 45 s'));
+  await click('content',L.start); assert.deepEqual(last(),{action:'robberyStart',args:{id:'shop'}});
+  input(L.amount).value='4'; await click('content',L.fence);assert.deepEqual(last(),{action:'fence',args:{amount:4}});
+  switchTab('gang'); const name=input(L.name);name.value='Concrete';name.focus();name.setSelectionRange(3,3);
+  snapshot();assert.equal(input(L.name).value,'Concrete');assert.equal(document.activeElement,input(L.name));assert.equal(input(L.name).selectionStart,3);
+  await click('content',L.create);assert.deepEqual(last(),{action:'gangCreate',args:{name:'Concrete'}});
+  assert(nodes.content.textContent.includes('<img src=x onerror=evil()>'));assert.equal(nodes.content.querySelectorAll('img').length,0);
+  fixture.gang={name:'Concrete',bank:200,score:10,role:'leader',items:{stolen:4}};snapshot();
+  input(L.target).value='2';await click('content',L.invite);assert.deepEqual(last(),{action:'gangInvite',args:{target:2}});
+  input(L.amount).value='73';input(L.amount).focus();snapshot();assert.equal(input(L.amount).value,'73');assert.equal(document.activeElement,input(L.amount));
+  await click('content',L.deposit);assert.deepEqual(last(),{action:'gangDeposit',args:{amount:73}});
+  assert(nodes.content.textContent.includes('10 / 60 s'));
+  switchTab('police');assert(nodes.content.textContent.includes('<script>evil()</script>'));assert.equal(nodes.content.querySelectorAll('script').length,0);
+  input(L.target).value='2';await click('content',L.arrest);assert.deepEqual(last(),{action:'police_arrest',args:{target:2}});
+  switchTab('inventory');await click('content',L.use);assert.deepEqual(last(),{action:'useItem',args:{item:'medkit'}});
+  switchTab('territory');assert(nodes.content.textContent.includes('50 / 180 s'));await click('content',L.capture);assert.deepEqual(last(),{action:'territoryStart',args:{id:'davis'}});
+  switchTab('ranking');assert(nodes.content.textContent.includes('<img onerror=evil()>'));assert.equal(nodes.content.querySelectorAll('img').length,0);
+  message({type:'notice',text:'<b>Rejected</b>'});assert.equal(nodes.toast.textContent,'<b>Rejected</b>');assert.equal(nodes.toast.querySelectorAll('b').length,0);
+  message({type:'open',value:false});assert.equal(nodes.menu.hidden,true);
+  documentEvents.keydown({key:'Escape'});assert.equal(calls.at(-1).url,'https://no_safe_turf/close');
+  sandbox.fetch=async()=>{throw Error('offline');};await click('tabs',L.tabs.street);await click('content',L.start);assert.equal(nodes.toast.textContent,L.requestFailed);
+  console.log('web_spec: all six tabs, seven action payloads, snapshot input/focus/cursor, text-only untrusted strings, progress, close, request failure passed');
+}
+run().catch(err=>{console.error(err);process.exitCode=1;});
+

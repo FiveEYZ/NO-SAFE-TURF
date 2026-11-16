@@ -1,0 +1,10 @@
+{
+  "name": "no-safe-turf",
+  "version": "0.2.1",
+  "private": true,
+  "description": "NO SAFE TURF server-side MariaDB storage",
+  "license": "MIT",
+  "engines": {"node": ">=22"},
+  "dependencies": {"mysql2": "3.14.1"},
+  "scripts": {"test:schedule": "node ../tests/schedule_spec.js"}
+}
