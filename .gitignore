@@ -20,3 +20,7 @@ dist/
 output/
 server-backups/
 *.backup.json.pending
+
+/resource/update-state.json
+/updater/backups/
+/updater/pending-update.json

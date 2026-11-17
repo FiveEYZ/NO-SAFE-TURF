@@ -1,0 +1,7 @@
+fx_version 'cerulean'
+game 'gta5'
+server_only 'yes'
+node_version '22'
+version '1.0.0'
+description 'NO SAFE TURF startup updater; no external process'
+server_script 'server.js'
