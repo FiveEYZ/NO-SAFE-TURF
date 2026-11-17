@@ -1,4 +1,4 @@
-# NO SAFE TURF · 0.4.0
+# NO SAFE TURF · 0.5.0
 
 Standalone English crime/survival for FiveM Enhanced: two robberies, gangs, shared cash/storage, player police, arrests, death loot, hideouts, raids, territories and weekly seasons. Open F6 or /nst.
 
@@ -6,7 +6,7 @@ Standalone English crime/survival for FiveM Enhanced: two robberies, gangs, shar
 
 Use [the txAdmin recipe guide](docs/TXADMIN_RECIPE.md) for a new test profile, or [external MariaDB/manual installation](docs/MARIADB.md) for a pre-created database or existing server. Runtime requires external MariaDB 10.11+, oxmysql 2.14.3, embedded Node 22, OneSync and the matching Enhanced client/server. No Python, paid resources or frontend build is required.
 
-Fresh installs use the [main-branch recipe](https://raw.githubusercontent.com/FiveEYZ/NO-SAFE-TURF/main/recipe.yaml) and the versioned v0.4.0 release asset. This release includes an in-server updater and the recent HUD, character appearance and ground-loading fixes. See [automatic updates](docs/AUTO_UPDATES.md) for existing installations and limitations.
+Fresh installs use the [main-branch recipe](https://raw.githubusercontent.com/FiveEYZ/NO-SAFE-TURF/main/recipe.yaml) and the versioned v0.5.0 release asset. This release adds an animated loading screen. Upgrading from v0.4.0 requires the [one-time loading screen installation](docs/LOADING_SCREEN.md), because the updater does not add new files. See [automatic updates](docs/AUTO_UPDATES.md) for existing installations and limitations.
 
 ## Current evidence
 

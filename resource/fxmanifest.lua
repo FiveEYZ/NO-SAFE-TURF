@@ -2,7 +2,7 @@ fx_version 'cerulean'
 game 'gta5'
 author 'NO SAFE TURF contributors'
 description 'NO SAFE TURF — crime and survival with weekly seasons'
-version '0.4.0'
+version '0.5.0'
 node_version '22'
 dependency '/onesync'
 dependency 'spawnmanager'
@@ -13,3 +13,6 @@ server_scripts {'server/storage.js','server/locales/police_en.lua','server/core.
 client_script 'client/main.lua'
 ui_page 'web/index.html'
 files {'web/index.html','web/style.css','web/locale.js','web/app.js'}
+
+loadscreen 'web/loading.html'
+files {'web/loading.html','web/loading.css','web/loading.js'}
