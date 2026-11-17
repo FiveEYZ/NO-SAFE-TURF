@@ -94,19 +94,26 @@ NST.handlers.robberyFinish=function(s,c,a)
     local p=criminal(s,c); local def=C.robberies[a.id]; local r=s.robberies[a.id]
     check(def and r and r.actor==c.id and p.robbery==a.id,L.noActiveRobbery)
     near(c,def.pos,def.radius); check((r.progress or 0)>=def.duration and c.now>=r.ends and c.now<=r.expires,L.robberyIncomplete)
-    NST.newDrop(s,{id=c.id,now=c.now,pos=def.pos},{stolen=def.reward},def.cashReward or (a.id=='shop' and 150 or 500),'robbery')
+    local loot={stolen=def.reward}
+    if a.id=='shop' and def.reward==6 then loot={stolen_watch=2,stolen_phone=2}
+    elseif a.id=='depot' and def.reward==16 then
+        if (s.nextDrop or 0)%2==0 then loot={stolen_laptop=1,stolen_tv=1,stolen_tools=1}
+        else loot={stolen_art=1,stolen_tools=1,stolen_phone=1,stolen_watch=1} end
+    end
+    if def.loot then loot=NST.copy(def.loot) end
+    NST.newDrop(s,{id=c.id,now=c.now,pos=def.pos},loot,def.cashReward or (a.id=='shop' and 150 or 500),'robbery')
     r.actor=nil; p.robbery=nil
     return NSTText('robberyLootReady')
 end
 NST.handlers.fence=function(s,c,a)
-    local p=criminal(s,c); near(c,C.fence); local n=amount(a.amount); take(p,'stolen',n)
+    local p=criminal(s,c); near(c,C.fence); local n=amount(a.amount);local item=a.item or 'stolen';local def=NST.itemDefinition(item);check(def.kind=='loot',L.unknownItem);take(p,item,n);n=n*def.value
     local bonus=0; if p.gang then for _,t in pairs(s.territories) do if t.owner==p.gang then bonus=bonus+C.territoryBonus end end end
     p.cash=p.cash+math.floor(n*C.fencePrice*(1+math.min(bonus,0.15)))
     if p.gang and s.gangs[p.gang] then s.gangs[p.gang].score=s.gangs[p.gang].score+n end
 end
 NST.handlers.shopBuy=function(s,c,a)
-    local p=criminal(s,c); near(c,C.shop); local price=C.prices[a.item]; check(price,L.unknownItem)
-    local n=amount(a.amount or 1); check(n<=10 and p.cash>=price*n,L.shopInsufficient); add(p,a.item,n); p.cash=p.cash-price*n
+    local p=criminal(s,c); near(c,C.shop); local price=C.prices[a.item] or (NST.itemCatalog[a.item] and NST.itemCatalog[a.item].price); check(price,L.unknownItem)
+    local n=amount(a.amount or 1); check(n<=100 and p.cash>=price*n,L.shopInsufficient); add(p,a.item,n); p.cash=p.cash-price*n
 end
 NST.handlers.hideoutBuy=function(s,c,a)
     local p=criminal(s,c); local g=gang(s,p,c.id); local def=C.hideouts[a.id]; check(def,L.unknownHideout); near(c,def.pos)
@@ -117,7 +124,7 @@ NST.handlers.hideoutBuy=function(s,c,a)
 end
 NST.handlers.hideoutStore=function(s,c,a)
     local p=criminal(s,c); local g=gang(s,p); hideout(s,c,p); local n=amount(a.amount)
-    check(a.item=='stolen' or C.prices[a.item] or (NST.inventoryRules().bags or NST.inventoryDefaults.bags)[a.item],L.itemNotStorable); take(p,a.item,n); g.items[a.item]=(g.items[a.item] or 0)+n
+    check(NST.itemCatalog[a.item] or C.prices[a.item],L.itemNotStorable); take(p,a.item,n); g.items[a.item]=(g.items[a.item] or 0)+n
 end
 NST.handlers.hideoutTake=function(s,c,a)
     local p=criminal(s,c); local g=gang(s,p,c.id); hideout(s,c,p); local n=amount(a.amount)
@@ -201,4 +208,19 @@ NST.handlers.inventoryDrop=function(s,c,a)
     if not d then d=s.drops[NST.newDrop(s,c,{},0,'ground')] end
     d.expiresAt=c.now+900
     if a.item=='cash' then d.cash=d.cash+n else d.items[a.item]=(d.items[a.item] or 0)+n end
+end
+
+NST.handlers.weaponEquip=function(s,c,a)
+ local p=player(s,c);check(not p.surrendered and (p.protectedUntil or 0)<=c.now,L.protectedOrSurrendered)
+ check(a.item=='none' or (NST.itemCatalog[a.item] and NST.itemCatalog[a.item].weapon and (p.items[a.item] or 0)>0),NSTText('weaponUnavailable'))
+ p.equippedWeapon=a.item~='none' and a.item or nil
+end
+NST.handlers.weaponFire=function(s,c)
+ local p=player(s,c);check(not p.surrendered and (p.protectedUntil or 0)<=c.now,L.protectedOrSurrendered);local def=p.equippedWeapon and NST.itemCatalog[p.equippedWeapon]
+ check(def and def.weapon and (p.items[p.equippedWeapon] or 0)>0 and (p.items[def.ammo] or 0)>0,NSTText('weaponUnavailable'))
+ -- Wall-clock seconds survive restarts; one authorized round per second initially.
+ check((p.nextShotAt or 0)<=c.now,NSTText('shotWait'))
+ p.items[def.ammo]=p.items[def.ammo]-1;p.nextShotAt=c.now+1;p.shotSerial=(p.shotSerial or 0)+1
+ p.combatUntil=c.now+30;if p.role=='criminal' then p.wantedUntil=math.max(p.wantedUntil or 0,c.now+600) end
+ s.alerts['gunfire:'..c.id]={kind='gunfire',text=NSTText('gunfireAlert'),pos=NST.copy(c.pos),expiresAt=c.now+60}
 end

@@ -52,6 +52,7 @@ local function drop(s, p, pos, now, id)
     p.cash = (p.cash or 0) - cash
     if p.bag then items[p.bag]=(items[p.bag] or 0)+1;p.bag=nil end
     p.items = {}
+    p.equippedWeapon=nil
     p.kit = false
     p.vehicleRequested = false
     if cash == 0 and not next(items) then return end
@@ -70,7 +71,7 @@ NST.handlers.police_duty = function(s, ctx)
     check((p.combatUntil or 0) <= ctx.now, L.combatRoleChange)
     check((p.wantedUntil or 0) <= ctx.now and not p.robbery and not p.raid, L.criminalActivity)
     check(not p.gang, L.leaveGang)
-    check((p.items.stolen or 0) == 0, L.stolenGoods)
+    for item,n in pairs(p.items) do check(n==0 or NST.itemDefinition(item).kind~='loot',L.stolenGoods) end
     if p.role == 'police' then
         p.role = 'criminal'
         p.kit = false
@@ -122,7 +123,8 @@ NST.handlers.police_arrest = function(s, ctx, a)
     check(target.role ~= 'police' and (target.wantedUntil or 0) > ctx.now, L.targetNotWanted)
     check((target.protectedUntil or 0) <= ctx.now, L.targetProtected)
     check(observed.alive and target.alive ~= false and target.surrendered, L.targetMustSurrender)
-    target.items.stolen = nil
+    for item in pairs(target.items) do local def=NST.itemDefinition(item);if def.kind=='loot' or def.weapon or def.kind=='ammo' then target.items[item]=nil end end
+    target.equippedWeapon=nil
     target.wantedUntil = 0
     target.surrendered = false
     target.jailUntil = ctx.now + cfg('sentence', 90)
@@ -210,6 +212,15 @@ NST.handlers.loot = function(s, ctx, a)
         for name,n in pairs(d.items) do p.items[name]=(p.items[name] or 0)+n end
         p.cash=p.cash+d.cash;s.drops[key]=nil
     end
+    if a.x~=nil or a.y~=nil then
+        check(a.revision==(p.gridRevision or 0),NSTText('inventoryChanged'))
+        check(a.item and (a.rotated==0 or a.rotated==1),NSTText('invalidPlacement'))
+        local def=NST.itemDefinition(a.item);local total=a.item=='cash' and p.cash or p.items[a.item]
+        local entry=a.item..':'..math.ceil(total/def.stack);local layout=NST.gridLayout(p)
+        local w,h=def.w,def.h;if a.rotated==1 then w,h=h,w end
+        check(NST.gridFits(layout.entries,entry,a.x,a.y,w,h,layout.cols,layout.rows),NSTText('invalidPlacement'))
+        NST.saveGrid(p,layout);p.grid[entry]={x=a.x,y=a.y,rotated=a.rotated}
+    end
     NST.checkCarry(p)
     return L.lootCollected
 end
@@ -279,14 +290,15 @@ NST.handlers.raid_finish = function(s, ctx, a)
     check(g, L.raidDefenderMissing)
     local percent = 30 - 5 * math.min(3, math.max(1, h.level or 1))
     local cash = math.floor((g.bank or 0) * percent / 100)
-    local stolen = math.floor(((g.items or {}).stolen or 0) * percent / 100)
+    local seized={}
+    for item,n in pairs(g.items or {}) do if NST.itemDefinition(item).kind=='loot' then seized[item]=math.floor(n*percent/100) end end
 
     g.bank = (g.bank or 0) - cash
     g.items = g.items or {}
-    g.items.stolen = (g.items.stolen or 0) - stolen
+    for item,n in pairs(seized) do g.items[item]=g.items[item]-n end
     if not r.police then
         p.cash = p.cash + cash
-        p.items.stolen = (p.items.stolen or 0) + stolen
+        for item,n in pairs(seized) do p.items[item]=(p.items[item] or 0)+n end
     end
     cancelRaid(s, p, ctx.id)
     return L.raidComplete

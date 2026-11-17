@@ -1,5 +1,6 @@
 local state,opened,spawned,lastKit,lastBat=nil,false,false,nil,nil
 local spawnFrozen=false
+local lastFirearm=nil;local lastShotSerial=0;local shotUntil=0
 local function send(action,args) TriggerServerEvent('nst:action',action,args or {}) end
 local function spawn()
     local p=NSTConfig.spawn
@@ -37,7 +38,7 @@ local function spawn()
         SetEntityVisible(ped,true,false)
         FreezeEntityPosition(ped,false)
         spawnFrozen=false
-        spawned=true; lastKit=nil; lastBat=nil; send('sync')
+        spawned=true; lastKit=nil; lastBat=nil;lastFirearm=nil; send('sync')
     end)
 end
 CreateThread(function()
@@ -77,11 +78,15 @@ RegisterNetEvent('nst:state',function(value)
     if drawable<GetNumberOfPedDrawableVariations(ped,5) then SetPedComponentVariation(ped,5,drawable,0,0) end
     if p.alive==false and not IsEntityDead(ped) then SetEntityHealth(ped,0) end
     local kit=p.kit==true and p.alive~=false; local bat=(p.items.bat or 0)>0 and p.alive~=false
-    if lastKit~=kit or lastBat~=bat then
+    local firearm=p.alive~=false and p.equippedWeapon and value.inventory and value.inventory.catalog and value.inventory.catalog[p.equippedWeapon]
+    local gun=firearm and firearm.weapon or nil
+    if lastKit~=kit or lastBat~=bat or lastFirearm~=gun then
         RemoveAllPedWeapons(ped,true)
         if kit then GiveWeaponToPed(ped,joaat('WEAPON_NIGHTSTICK'),1,false,true) end
         if bat then GiveWeaponToPed(ped,joaat('WEAPON_BAT'),1,false,true) end
-        lastKit=kit;lastBat=bat
+        if gun then GiveWeaponToPed(ped,joaat(gun),0,false,true);SetCurrentPedWeapon(ped,joaat(gun),true) end
+        SetPedInfiniteAmmoClip(ped,false)
+        lastKit=kit;lastBat=bat;lastFirearm=gun
     end
 end)
 RegisterNetEvent('nst:respawn',function() spawn() end)
@@ -106,6 +111,11 @@ CreateThread(function()
             local p=state.player; local now=state.now+math.floor((GetGameTimer()-(state.receivedAt or GetGameTimer()))/1000)
             local safe=(p.protectedUntil or 0)>now; local jailed=(p.jailUntil or 0)>now
             SetPlayerInvincible(PlayerId(),safe)
+            if lastFirearm then
+                DisableControlAction(0,24,true);DisableControlAction(0,257,true);DisableControlAction(0,45,true)
+                if GetGameTimer()>shotUntil then DisablePlayerFiring(PlayerId(),true);SetPedAmmo(PlayerPedId(),joaat(lastFirearm),0) end
+                if not opened and not IsNuiFocused() and not safe and not jailed and not p.surrendered and IsPlayerFreeAiming(PlayerId()) and IsDisabledControlJustPressed(0,24) then send('weaponFire') end
+            end
             if safe or jailed or p.surrendered then
                 DisablePlayerFiring(PlayerId(),true); DisableControlAction(0,24,true); DisableControlAction(0,25,true); DisableControlAction(0,140,true)
             end
@@ -118,6 +128,10 @@ CreateThread(function()
             elseif IsEntityPlayingAnim(PlayerPedId(),'missminuteman_1ig_2','handsup_base',3) then ClearPedSecondaryTask(PlayerPedId()) end
             local nearby=false
             for _,d in pairs(state.drops or {}) do if d.canOpen then nearby=true end; DrawMarker(1,d.pos.x,d.pos.y,d.pos.z-1,0,0,0,0,0,0,0.6,0.6,0.4,255,190,60,160,false,false,2,false,nil,nil,false) end
+            if nearby and not opened and not IsNuiFocused() then
+                BeginTextCommandDisplayHelp('STRING');AddTextComponentSubstringPlayerName(NSTText('openLoot'));EndTextCommandDisplayHelp(0,false,false,-1)
+                if IsControlJustReleased(0,38) then opened=true;SetNuiFocus(true,true);SendNUIMessage({type='open',value=true,tab='inventory'});send('sync') end
+            end
         end
     end
 end)
@@ -146,4 +160,20 @@ CreateThread(function()
 end)
 AddEventHandler('onResourceStop',function(name)
     if name==GetCurrentResourceName() then for _,object in pairs(lootObjects) do DeleteEntity(object) end end
+end)
+RegisterNetEvent('nst:shot',function(data)
+    if type(data)~='table' or type(data.serial)~='number' or data.serial<=lastShotSerial then return end
+    lastShotSerial=data.serial
+    if data.weapon~=lastFirearm or not state or not state.player.alive or opened or IsNuiFocused() then return end
+    local p=state.player;local now=state.now+math.floor((GetGameTimer()-(state.receivedAt or GetGameTimer()))/1000)
+    if p.surrendered or (p.protectedUntil or 0)>now or (p.jailUntil or 0)>now then return end
+    local ped=PlayerPedId();if IsEntityDead(ped) then return end
+    local camera=GetGameplayCamCoord();local rotation=GetGameplayCamRot(2)
+    local pitch,yaw=math.rad(rotation.x),math.rad(rotation.z)
+    local dx,dy,dz=-math.sin(yaw)*math.cos(pitch),math.cos(yaw)*math.cos(pitch),math.sin(pitch)
+    local hash=joaat(lastFirearm)
+    SetPedAmmo(ped,hash,1);SetAmmoInClip(ped,hash,1);SetCurrentPedWeapon(ped,hash,true)
+    shotUntil=GetGameTimer()+150
+    DisablePlayerFiring(PlayerId(),false)
+    SetPedShootsAtCoord(ped,camera.x+dx*150,camera.y+dy*150,camera.z+dz*150,true)
 end)

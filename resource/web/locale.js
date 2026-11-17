@@ -1,5 +1,9 @@
 // English is the default interface language.
 window.L = {
+ gridTransferHint:'SELECT TO TRANSFER',gridInstructions:'Drag an item, or select it and click a cell. R rotates before placement.',
+ gridEquipmentHint:'ACTIVE LOADOUT',gridOverflow:'OVERFLOW — unload or rearrange. No items were deleted.',
+ equipment:'Equipment',rotate:'Rotate · R',holster:'Holster',selectItem:'Select an item to inspect, rotate or transfer it.',baseValue:'Base sale value',
+
   bag_small:'Small bag',bag_medium:'Backpack',bag_large:'Large duffel',pockets:'Pockets',
   carrying:'Carrying',equipped:'Equipped',equip:'Equip',unequip:'Remove bag',drop:'Drop on ground',
   nearbyLoot:'Nearby loot',collect:'Collect',openNearby:'Approach a loot marker to transfer items.',

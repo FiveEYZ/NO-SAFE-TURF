@@ -1,5 +1,11 @@
 -- Shared English defaults. All player/admin wording belongs in locale modules.
 NSTLocale = {
+    gunfireAlert='Gunfire reported',
+    inventoryChanged='Inventory changed. Select the item again.',
+    invalidPlacement='That item does not fit here. Move or rotate it.',
+    inventoryNoRoom='Not enough grid space. Rearrange your items or equip a larger bag.',
+    weaponUnavailable='Equip a firearm and carry matching ammunition first.',
+    shotWait='Wait before firing again.',
     inventoryTooHeavy='Not enough carrying capacity. Move less or equip a larger bag.',
     robberyLootReady='Loot is ready at the robbery location. Approach it and open your inventory to collect it.',
     groundFull='Too many ground containers. Collect existing loot first.',

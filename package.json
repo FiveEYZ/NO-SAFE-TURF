@@ -1,6 +1,6 @@
 {
   "name": "no-safe-turf-development",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "license": "MIT",
   "engines": {"node": ">=22"},

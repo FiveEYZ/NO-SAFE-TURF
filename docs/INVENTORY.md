@@ -1,5 +1,7 @@
 # Physical inventory and bags — v0.6.0
 
+For the newer grid UI, item shapes, rarity and firearms, see GRID_INVENTORY.md. This document records the initial weight-based implementation.
+
 Open Inventory through F6 or /nst, or press E beside accessible world loot. The left panel shows carried items and cash; the right shows nearby containers. Enter a quantity and Collect or Drop on ground. Transfers are explicit buttons, not drag-and-drop. Items must be carried to the fence or hideout before selling or storing them.
 
 ## Capacity

@@ -95,7 +95,29 @@ NST.handlers.testInventoryOverflow=function(s,c) s.players[c.id].cash=1000000 en
 local beforeCash=db.state.players['license:a'].cash;local beforeRevision=db.revision
 action(1,'testInventoryOverflow');assert(db.state.players['license:a'].cash==beforeCash and db.revision==beforeRevision)
 NST.handlers.testInventoryOverflow=nil
+-- A failed ammo commit never authorizes a shot. Successful tickets are single-use.
+now=1250;timer=250000;players[1].health=200
+local shooter=db.state.players['license:a'];shooter.role='criminal';shooter.protectedUntil=0;shooter.jailUntil=0;shooter.surrendered=false;shooter.items={pistol=1,ammo_9mm=3};shooter.bag='bag_medium';shooter.equippedWeapon='pistol';shooter.cash=500
+fault=true;action(1,'sync')
+local shotEvents=eventCount('nst:shot',1);fault=true;action(1,'weaponFire')
+assert(db.state.players['license:a'].items.ammo_9mm==3 and eventCount('nst:shot',1)==shotEvents, 'ammo='..tostring(db.state.players['license:a'].items.ammo_9mm)..' shots='..eventCount('nst:shot',1)..' previous='..shotEvents)
+now=1251;timer=251000;action(1,'weaponFire');assert(db.state.players['license:a'].items.ammo_9mm==2 and eventCount('nst:shot',1)==shotEvents+1)
+local cancelled=0
+function CancelEvent() cancelled=cancelled+1 end
+function NetworkGetEntityFromNetworkId(n) return n end
+function NetworkGetEntityOwner(n) return n end
+function DoesEntityExist(n) return players[n]~=nil end
+function GetPlayerRoutingBucket() return 0 end
+function GetEntityRoutingBucket() return 0 end
+players[2].pos=players[1].pos;players[2].health=200
+local function damage(data) local before=cancelled;handlers.weaponDamageEvent(1,data);return cancelled>before end
+assert(damage({hitGlobalId=2,hitGlobalIds={1},weaponType=joaat('WEAPON_PISTOL')}),'mismatched target must reject')
+assert(not damage({hitGlobalId=2,hitGlobalIds={2},weaponType=joaat('WEAPON_PISTOL')}),'valid ticket must allow one hit')
+assert(damage({hitGlobalId=2,weaponType=joaat('WEAPON_PISTOL')}),'replayed ticket must reject')
+step()
 -- A scheduled wipe committed behind a failed read is reconciled on later reload.
 players[1].health=200;now=1300;timer=300000;stateLostWipe=true;step();local beforeKicks=#droppedMessages
 step();assert(#droppedMessages>beforeKicks and droppedMessages[#droppedMessages]==NSTText('newSeason'))
 print('adapter_spec: passed (boot, identity/session, authorization, failed commit, post-commit heal, server death)')
+
+

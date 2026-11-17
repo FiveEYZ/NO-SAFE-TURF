@@ -1,6 +1,8 @@
 dofile('resource/server/core.lua')
 dofile('resource/shared/config.lua')
 dofile('resource/server/gameplay.lua')
+-- Keep legacy-goods economy fixture; grid_spec covers the new mixed loot catalog.
+NSTConfig.robberies.shop.loot={stolen=6};NSTConfig.robberies.depot.loot={stolen=16}
 dofile('resource/server/police.lua')
 local function state() return {players={},gangs={},territories={},robberies={},hideouts={},drops={},alerts={},season=1} end
 local function ctx(id,pos) return {id=id,now=1000,pos=pos or NSTConfig.robberies.shop.pos,online={},policeCount=1} end

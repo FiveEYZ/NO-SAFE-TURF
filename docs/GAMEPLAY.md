@@ -1,6 +1,8 @@
 # NO SAFE TURF: first-version gameplay rules
 
-All prices and map positions are in `resource/shared/config.lua`. Money, storage, and missions are controlled by the server. Quantities must be positive integers. Changes are saved before results are displayed. The first version uses melee weapons (baseball bats); firearms and ammunition await a separate server-controlled ammunition economy.
+All prices and map positions are in `resource/shared/config.lua`. Money, storage, and missions are controlled by the server. Quantities must be positive integers. Changes are saved before results are displayed. Melee weapons and physical pistol/rifle ammunition are supported; see GRID_INVENTORY.md for the initial server-paced firearm behavior.
+
+For the current mixed loot rewards, sizes, rarities and values, see GRID_INVENTORY.md. The original generic-goods values below describe legacy items and custom robbery overrides.
 
 ## From robbery to secured loot
 

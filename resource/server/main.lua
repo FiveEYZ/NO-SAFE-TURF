@@ -1,6 +1,7 @@
 local envelope, busy, queue = nil, false, {}
 local sessions, rates, vehicles, respawning, damageRates = {}, {}, {}, {}, {}
 local administrativeDrops,adminHealing={},{}
+local authorizedShots={}
 local recoveryState=nil
 local lastStorageError=nil
 local function request(path,method,data)
@@ -50,7 +51,7 @@ local function view(src)
     table.sort(leaderboard,function(a,b)return a.score>b.score end)
     for _,n in ipairs(GetPlayers()) do people[#people+1]={id=tonumber(n),name=GetPlayerName(n)} end
     local pos=position(src); local drops={}
-    for key,d in pairs(s.drops) do if NST.near(pos,d.pos,35) then drops[#drops+1]={id=key,pos=d.pos,unlockAt=d.unlockAt,kind=d.kind,items=NST.near(pos,d.pos,3) and d.items or nil,cash=NST.near(pos,d.pos,3) and d.cash or nil,canOpen=NST.near(pos,d.pos,3) and (d.owner==id or os.time()>=d.unlockAt)} end end
+    for key,d in pairs(s.drops) do if NST.near(pos,d.pos,35) then drops[#drops+1]={id=key,pos=d.pos,unlockAt=d.unlockAt,kind=d.kind,expiresAt=d.expiresAt,items=NST.near(pos,d.pos,3) and d.items or nil,cash=NST.near(pos,d.pos,3) and d.cash or nil,canOpen=NST.near(pos,d.pos,3) and (d.owner==id or os.time()>=d.unlockAt)} end end
     local alerts={}
     for _,a in pairs(s.alerts or {}) do
         if (a.expiresAt or a.expires or 0)>os.time() and (p.role=='police' or a.kind=='raid') then alerts[#alerts+1]={kind=a.kind,text=a.text,pos=a.pos,expiresAt=a.expiresAt} end
@@ -94,6 +95,7 @@ local function effects(old,s)
 end
 local function commit(nextState,action,actor)
     local old=envelope.state
+    NST.refreshGrids(old,nextState)
     local r=request('/commit','POST',{revision=envelope.revision,state=nextState,audit={action=action,actor=actor or 'system'}})
     if r.code~=200 then
         recoveryState=old
@@ -166,7 +168,12 @@ RegisterNetEvent('nst:action',function(action,args)
         commit(s,action,id)
         if identity(src)==id and sessions[src] and sessions[src].nonce==nonce then
             if action=='useItem' then TriggerClientEvent('nst:heal',src) end
-            if action~='sync' then tell(src,NSTText('actionComplete')) end
+            if action=='weaponFire' then
+                local shooter=s.players[id];local def=NST.itemCatalog[shooter.equippedWeapon]
+                authorizedShots[id]={weapon=joaat(def.weapon),expires=GetGameTimer()+1500,serial=shooter.shotSerial,nonce=nonce}
+                TriggerClientEvent('nst:shot',src,{weapon=def.weapon,serial=shooter.shotSerial})
+            elseif action=='weaponEquip' or action=='inventoryDrop' or action=='hideoutStore' then authorizedShots[id]=nil end
+            if action~='sync' and action~='weaponFire' and action~='inventoryMove' then tell(src,NSTText('actionComplete')) end
         end
     end,src) then tell(src,NSTText('serverBusy')) end
 end)
@@ -210,6 +217,7 @@ AddEventHandler('playerDropped',function()
     sessions[src]=nil; rates[src]=nil; damageRates[src]=nil
     if not id then return end
     local pos=position(src) or (session and session.pos) or NSTConfig.spawn
+    authorizedShots[id]=nil
     cleanupVehicle(id)
     enqueue(function()
         if not envelope then return end
@@ -219,18 +227,35 @@ AddEventHandler('playerDropped',function()
 end)
 AddEventHandler('weaponDamageEvent',function(sender,data)
     local id=identity(sender); if not id or not envelope then CancelEvent(); return end
-    local victimEntity=NetworkGetEntityFromNetworkId(data.hitGlobalId or 0)
-    local victim= victimEntity~=0 and identity(NetworkGetEntityOwner(victimEntity)) or nil
+    local targetId=data.hitGlobalId
+    if type(targetId)~='number' or targetId<=0 then CancelEvent();return end
+    if data.hitGlobalIds and (#data.hitGlobalIds>1 or (#data.hitGlobalIds==1 and data.hitGlobalIds[1]~=targetId)) then CancelEvent();return end
+    local victimEntity=NetworkGetEntityFromNetworkId(targetId)
+    if victimEntity==0 or not DoesEntityExist(victimEntity) then CancelEvent();return end
+    local targetOwner=NetworkGetEntityOwner(victimEntity)
+    local victim=targetOwner and victimEntity==GetPlayerPed(targetOwner) and identity(targetOwner) or nil
     local attackerPos,attackerAlive=position(sender)
     if not attackerAlive then CancelEvent(); return end
+    local shooter=envelope.state.players[id]
+    local firearm=shooter and shooter.equippedWeapon and NST.itemCatalog[shooter.equippedWeapon]
+    local isFirearm=firearm and firearm.weapon and data.weaponType==joaat(firearm.weapon)
+    if isFirearm then
+        local ticket=authorizedShots[id]
+        if not ticket or ticket.weapon~=data.weaponType or ticket.expires<GetGameTimer() or not sessions[sender] or ticket.nonce~=sessions[sender].nonce or (shooter.items[shooter.equippedWeapon] or 0)<1 then CancelEvent();return end
+        if data.hitGlobalIds and #data.hitGlobalIds>1 then CancelEvent();return end
+        if data.overrideDefaultDamage or data.hitWeaponAmmoAttachment or data.hitEntityWeapon then CancelEvent();return end
+    end
+    local targetCoords=GetEntityCoords(victimEntity)
+    if not NST.near(attackerPos,{x=targetCoords.x,y=targetCoords.y,z=targetCoords.z},isFirearm and firearm.range or 5) or GetPlayerRoutingBucket(sender)~=GetEntityRoutingBucket(victimEntity) then CancelEvent();return end
     if victim then
         local victimSrc=NetworkGetEntityOwner(victimEntity); local victimPos,victimAlive=position(victimSrc)
-        if victimEntity~=GetPlayerPed(victimSrc) or not victimAlive or not NST.near(attackerPos,victimPos,5) or GetPlayerRoutingBucket(sender)~=GetPlayerRoutingBucket(victimSrc) then CancelEvent(); return end
+        if victimEntity~=GetPlayerPed(victimSrc) or not victimAlive or not NST.near(attackerPos,victimPos,isFirearm and firearm.range or 5) or GetPlayerRoutingBucket(sender)~=GetPlayerRoutingBucket(victimSrc) then CancelEvent(); return end
     end
     local p=envelope.state.players[id]; local v=victim and envelope.state.players[victim]
     if not p or not p.alive or (p.protectedUntil or 0)>os.time() or (p.jailUntil or 0)>os.time() or p.surrendered or (v and (v.protectedUntil or 0)>os.time()) then CancelEvent(); return end
     local weapon=data.weaponType
-    if weapon~=joaat('WEAPON_UNARMED') and not (weapon==joaat('WEAPON_BAT') and (p.items.bat or 0)>0) and not (weapon==joaat('WEAPON_NIGHTSTICK') and p.role=='police' and p.kit) then CancelEvent(); return end
+    if not isFirearm and weapon~=joaat('WEAPON_UNARMED') and not (weapon==joaat('WEAPON_BAT') and (p.items.bat or 0)>0) and not (weapon==joaat('WEAPON_NIGHTSTICK') and p.role=='police' and p.kit) then CancelEvent(); return end
+    if isFirearm then authorizedShots[id]=nil end
     if (damageRates[sender] or 0)>GetGameTimer() then return end
     damageRates[sender]=GetGameTimer()+1000
     enqueue(function()

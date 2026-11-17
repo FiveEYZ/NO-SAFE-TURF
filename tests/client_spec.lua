@@ -41,3 +41,28 @@ groundAvailable=false;before=sends
 events['nst:respawn']();spawnCallback()
 assert(frozen and sends==before,'missing ground must not release the player or announce spawn completion')
 print('client_spec: existing NUI focus respected; own menu toggles normally')
+-- Server grants trigger at most one native shot and only for the equipped firearm.
+function GetGameTimer() return 1000 end
+function GetNumberOfPedDrawableVariations() return 100 end
+function SetPedComponentVariation() end
+function IsEntityDead() return false end
+function RemoveAllPedWeapons() end
+function GiveWeaponToPed() end
+function SetCurrentPedWeapon() end
+function SetPedInfiniteAmmoClip() end
+function joaat(v) return v end
+function SetPedAmmo() end
+function DisablePlayerFiring() end
+function PlayerId() return 1 end
+function SetAmmoInClip() end
+function GetGameplayCamCoord() return {x=0,y=0,z=1} end
+function GetGameplayCamRot() return {x=0,y=0,z=0} end
+local fired=0
+function SetPedShootsAtCoord(_,x,y,z) fired=fired+1;assert(y==150) end
+focused=false
+local snapshot={now=1000,player={alive=true,cash=500,items={pistol=1,ammo_9mm=3},equippedWeapon='pistol'},inventory={bags={},catalog={pistol={weapon='WEAPON_PISTOL'}}}}
+events['nst:state'](snapshot)
+events['nst:shot']({weapon='WEAPON_PISTOL',serial=1});assert(fired==1)
+events['nst:shot']({weapon='WEAPON_PISTOL',serial=1});assert(fired==1)
+snapshot.player.equippedWeapon=nil;events['nst:state'](snapshot)
+events['nst:shot']({weapon='WEAPON_PISTOL',serial=2});assert(fired==1)

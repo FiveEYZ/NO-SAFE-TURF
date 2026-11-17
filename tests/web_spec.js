@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const calls = [], events = {}, documentEvents = {}, nodes = {};
 let document;
 class Element {
-  constructor(tag) { this.tagName=tag.toUpperCase(); this.children=[]; this.style={}; this.value=''; this.selectionStart=null; this.attributes={}; this._text=''; this.classList={toggle(){}}; }
+  constructor(tag) { this.tagName=tag.toUpperCase(); this.children=[]; this.style={setProperty(k,v){this[k]=v;}}; this.value=''; this.selectionStart=null; this.attributes={}; this._text=''; this.classList={toggle(){},add(){},contains(){return false;}}; }
   set textContent(value) { this._text=String(value); this.children=[]; }
   get textContent() { return this._text+this.children.map(n=>n.textContent).join(''); }
   set innerHTML(_) { throw Error('Unsafe HTML sink used'); }
@@ -60,6 +60,15 @@ async function run(){
   fixture.drops[0].cash=0;snapshot();
   assert.equal(nodes.content.querySelectorAll('input').find(n=>n.nstKey==='loot:loot-a:stolen').value,'3');
   assert.equal(document.activeElement.nstKey,'loot:loot-a:stolen');
+  fixture.inventory.catalog={cash:{w:1,h:1,stack:10000,label:'Cash'},stolen:{w:2,h:1,stack:1,label:'Stolen goods',kind:'loot',rarity:'common',value:1},pistol:{w:2,h:2,label:'Pistol',weapon:'WEAPON_PISTOL',ammo:'ammo_9mm'}};
+  fixture.inventory.grid={cols:4,rows:4,revision:7,entries:[{id:'stolen:1',item:'stolen',amount:1,x:0,y:0,w:2,h:1,rotated:0}],overflow:0};
+  fixture.drops=[];snapshot();
+  const tile=nodes.content.querySelectorAll('button').find(n=>n.attributes['aria-label']==='Stolen goods · 2×1 · common');assert(tile);tile.onclick();
+  await click('content',L.rotate);assert(nodes.content.textContent.includes('1×2'));
+  const boards=nodes.content.querySelectorAll('div').filter(n=>n.ondrop);assert.equal(boards.length,1);
+  boards[0].getBoundingClientRect=()=>({left:0,top:0,width:200,height:200});
+  boards[0].ondrop({clientX:160,clientY:10,preventDefault(){}});
+  assert.deepEqual(last(),{action:'inventoryMove',args:{entry:'stolen:1',x:3,y:0,rotated:1,revision:7}});
   switchTab('territory');assert(nodes.content.textContent.includes('50 / 180 s'));await click('content',L.capture);assert.deepEqual(last(),{action:'territoryStart',args:{id:'davis'}});
   switchTab('ranking');assert(nodes.content.textContent.includes('<img onerror=evil()>'));assert.equal(nodes.content.querySelectorAll('img').length,0);
   message({type:'notice',text:'<b>Rejected</b>'});assert.equal(nodes.toast.textContent,'<b>Rejected</b>');assert.equal(nodes.toast.querySelectorAll('b').length,0);
