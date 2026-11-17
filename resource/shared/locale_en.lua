@@ -1,5 +1,6 @@
 -- Shared English defaults. All player/admin wording belongs in locale modules.
 NSTLocale = {
+    spawnWorldUnavailable='The spawn area could not load. Please reconnect. Contact an administrator if this continues.',
     invalidAmount='Invalid amount', playerMissing='Player not found', unknownAction='Unknown action',
     newSeason='A new season has started. Please reconnect.',
     storageChanged='Storage changed or did not respond. Refresh and check the result.',

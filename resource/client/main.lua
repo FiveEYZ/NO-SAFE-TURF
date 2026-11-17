@@ -1,15 +1,42 @@
 local state,opened,spawned,lastKit,lastBat=nil,false,false,nil,nil
+local spawnFrozen=false
 local function send(action,args) TriggerServerEvent('nst:action',action,args or {}) end
 local function spawn()
     local p=NSTConfig.spawn
+    spawned=false
     exports.spawnmanager:spawnPlayer({x=p.x,y=p.y,z=p.z,heading=90,model='mp_m_freemode_01',skipFade=false},function()
         -- Freemode models need an initial appearance; spawnmanager only loads
         -- the model and position. Apply this again to each newly spawned ped.
         local ped=PlayerPedId()
+        spawnFrozen=true
+        FreezeEntityPosition(ped,true)
+        SetEntityCoordsNoOffset(ped,p.x,p.y,p.z,false,false,false)
+        local grounded=false
+        for attempt=1,300 do
+            RequestCollisionAtCoord(p.x,p.y,p.z)
+            if not grounded then
+                local found,groundZ=GetGroundZFor_3dCoord(p.x,p.y,p.z+50.0,false)
+                if found then
+                    SetEntityCoordsNoOffset(ped,p.x,p.y,groundZ+1.0,false,false,false)
+                    grounded=true
+                    -- Allow streaming to update at the corrected ground height.
+                    Wait(100)
+                end
+            end
+            if grounded and HasCollisionLoadedAroundEntity(ped) then break end
+            Wait(100)
+        end
+        if not grounded or not HasCollisionLoadedAroundEntity(ped) then
+            SendNUIMessage({type='notice',text=NSTText('spawnWorldUnavailable')})
+            print('[NST] '..NSTText('spawnWorldUnavailable'))
+            return -- Keep the player frozen instead of releasing into missing terrain.
+        end
         SetPedDefaultComponentVariation(ped)
         ClearAllPedProps(ped)
         ResetEntityAlpha(ped)
         SetEntityVisible(ped,true,false)
+        FreezeEntityPosition(ped,false)
+        spawnFrozen=false
         spawned=true; lastKit=nil; lastBat=nil; send('sync')
     end)
 end
@@ -90,4 +117,4 @@ CreateThread(function()
         end
     end
 end)
-AddEventHandler('onResourceStop',function(name) if name==GetCurrentResourceName() then SetNuiFocus(false,false); SetPlayerInvincible(PlayerId(),false) end end)
+AddEventHandler('onResourceStop',function(name) if name==GetCurrentResourceName() then if spawnFrozen then FreezeEntityPosition(PlayerPedId(),false) end; SetNuiFocus(false,false); SetPlayerInvincible(PlayerId(),false) end end)
