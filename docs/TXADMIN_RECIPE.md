@@ -1,10 +1,10 @@
-# txAdmin installation recipe · 0.3.1
+# txAdmin installation recipe · 0.3.2
 
 This custom engine-3 recipe uses documented actions and the official Enhanced base-resource structure. It does not need inclusion in the official popular-recipes list. All NUI and upstream runtime files are prebuilt.
 
 ## Release and installation URL
 
-Use https://raw.githubusercontent.com/FiveEYZ/NO-SAFE-TURF/main/recipe.yaml with the matching v0.3.1 release asset. See RELEASE_0.3.1.md for Enhanced compatibility adjustments. The upstream oxmysql manifest is adapted from /server:12913 to /server:177; Node 22 remains required. Full Enhanced deployment is still unverified.
+Use https://raw.githubusercontent.com/FiveEYZ/NO-SAFE-TURF/main/recipe.yaml with the matching v0.3.2 release asset. See RELEASE_0.3.2.md for Enhanced compatibility adjustments. The upstream oxmysql manifest is adapted from /server:12913 to /server:177; Node 22 remains required. Full Enhanced deployment is still unverified.
 
 ## Fresh installation
 
@@ -20,7 +20,7 @@ Server listing metadata belongs in Cfx Portal following the official Enhanced te
 
 - oxmysql v2.14.3 release ZIP: SHA256 F6DB8F612A36A8A75FCCDE300E8C4135696B5BBCA5770CD7F26458949E1F7872.
 - Cfx server-data commit 32d98e7524b952faf8b220d719615b0346b0a6cc. Downloaded archive SHA256 7A394DC03E0B0999DD13269EA471436B00E80DCDEE974D7CD727FFACA95E733B.
-- Mod release v0.3.1; publish the matching reviewed ZIP, not GitHub's source-only ZIP.
+- Mod release v0.3.2; publish the matching reviewed ZIP, not GitHub's source-only ZIP.
 
 Upstream archive downloads, paths and manifests were inspected locally. Standard documented recipe actions do not provide a hash-verification field, so no invented action is used; version references are locked and build-time checksums recorded. Preserve release assets rather than replacing them under the same tag.
 

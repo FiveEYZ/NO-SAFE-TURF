@@ -1,14 +1,22 @@
 'use strict';
 // Adapter for the pinned oxmysql 2.14.3 interactive transaction export.
 // No retry/fallback: callers reconcile unknown outcomes through persisted revision.
-function createOxPool(api,dispatch=fn=>fn()) {
+function createOxPool(api,dispatch=fn=>fn(),{readyTimeoutMs=10000,readyPollMs=100}={}) {
   let stopped=false;
   const active=new Set();
   const call=fn=>new Promise((resolve,reject)=>dispatch(()=>{try{Promise.resolve(fn()).then(resolve,reject);}catch(e){reject(e);}}));
   return {
     async getConnection(){
       if(stopped)throw new Error('Storage stopped');
-      if(api.isReady && !await call(()=>api.isReady()))throw new Error('Database pool is not ready');
+      // Resource startup completes before oxmysql's asynchronous connection.
+      // Wait only before acquiring a connection; never retry a query or write.
+      const deadline=Date.now()+readyTimeoutMs;
+      while(api.isReady && !await call(()=>api.isReady())) {
+        if(stopped)throw new Error('Storage stopped');
+        if(Date.now()>=deadline)throw new Error('Database pool is not ready');
+        await new Promise(resolve=>setTimeout(resolve,Math.min(readyPollMs,Math.max(1,deadline-Date.now()))));
+      }
+      if(stopped)throw new Error('Storage stopped');
       let run=null,finish=null,completion=null,released=false;
       const connection={
         async query(sql,args=[]){if(released||stopped)throw new Error('Connection closed');return [await call(()=>run?run(sql,args):api.query_async(sql,args))];},

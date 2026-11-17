@@ -25,7 +25,16 @@ async function main(){
   const delayed=createOxPool({startTransaction:async cb=>{assert.equal(await cb(async()=>[]),false);await new Promise(resolve=>{rollbackAck=resolve;});return false;}});
   const d=await delayed.getConnection();await d.beginTransaction();const ending=delayed.end().then(()=>{ended=true;});
   while(!rollbackAck)await new Promise(setImmediate);assert.equal(ended,false);rollbackAck();await ending;assert.equal(ended,true);
-  const unavailable=createOxPool({isReady:()=>false});await assert.rejects(()=>unavailable.getConnection(),/not ready/);await unavailable.end();
+  const unavailable=createOxPool({isReady:()=>false},fn=>fn(),{readyTimeoutMs:0});await assert.rejects(()=>unavailable.getConnection(),/not ready/);await unavailable.end();
+  let checks=0,startupQueries=0;
+  const starting=createOxPool({isReady:()=>++checks>=3,query_async:async()=>{startupQueries++;return [];}},fn=>setImmediate(fn),{readyTimeoutMs:1000,readyPollMs:1});
+  const started=await starting.getConnection();assert.equal(checks,3);assert.equal(startupQueries,0);
+  await started.query('SELECT 1');assert.equal(startupQueries,1);started.release();await starting.end();
+  let checked;
+  const checkedOnce=new Promise(resolve=>{checked=resolve;});
+  const stopping=createOxPool({isReady:()=>{checked();return false;}},fn=>fn(),{readyTimeoutMs:1000,readyPollMs:1});
+  const pending=assert.rejects(stopping.getConnection(),/Storage stopped/);
+  await checkedOnce;await stopping.end();await pending;
   console.log('PASS: oxmysql transaction commit acknowledgement, rollback, resource stop, failure and private config encoding');
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});
