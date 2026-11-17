@@ -3,6 +3,13 @@ local function send(action,args) TriggerServerEvent('nst:action',action,args or 
 local function spawn()
     local p=NSTConfig.spawn
     exports.spawnmanager:spawnPlayer({x=p.x,y=p.y,z=p.z,heading=90,model='mp_m_freemode_01',skipFade=false},function()
+        -- Freemode models need an initial appearance; spawnmanager only loads
+        -- the model and position. Apply this again to each newly spawned ped.
+        local ped=PlayerPedId()
+        SetPedDefaultComponentVariation(ped)
+        ClearAllPedProps(ped)
+        ResetEntityAlpha(ped)
+        SetEntityVisible(ped,true,false)
         spawned=true; lastKit=nil; lastBat=nil; send('sync')
     end)
 end
