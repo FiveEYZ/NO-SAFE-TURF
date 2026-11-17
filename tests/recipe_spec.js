@@ -5,8 +5,12 @@ const YAML=require('yaml');
 const root=path.resolve(__dirname,'..');
 const recipe=YAML.parse(fs.readFileSync(path.join(root,'recipe.yaml'),'utf8'));
 assert.equal(recipe.$engine,3);assert.equal(recipe.$onesync,'on');
-const actions=new Set(['write_file','load_vars','connect_database','download_file','unzip','query_database','download_github','move_path','remove_path']);
+assert.equal(recipe.$minFxVersion,undefined,'Do not apply a Legacy artifact threshold to Enhanced');
+const actions=new Set(['write_file','load_vars','connect_database','download_file','unzip','query_database','download_github','move_path','remove_path','replace_string']);
 for(const task of recipe.tasks)assert(actions.has(task.action),'Unsupported action '+task.action);
+const compatibility=recipe.tasks.find(t=>t.action==='replace_string');
+assert.equal(compatibility.search,'/server:12913');assert.equal(compatibility.replace,'/server:177');
+assert(recipe.tasks.find(t=>t.action==='download_file').url.includes('/v'+recipe.version+'/'));
 const cfg=fs.readFileSync(path.join(root,'deploy/recipe-server.cfg'),'utf8');
 for(const key of ['maxClients','addPrincipalsMaster','serverEndpoints','svLicense','dbConnectionString'])assert(cfg.includes('{{'+key+'}}'));
 for(const name of ['nst_database_config','oxmysql','no_safe_turf'])assert(cfg.includes('ensure '+name));
@@ -36,9 +40,17 @@ for(const task of recipe.tasks){
    const top=fs.readdirSync(extracted)[0];fs.cpSync(path.join(extracted,top,task.subpath),resolve(task.dest),{recursive:true});break;
   }
   case 'move_path':{const dest=resolve(task.dest);assert(!fs.existsSync(dest));fs.mkdirSync(path.dirname(dest),{recursive:true});fs.renameSync(resolve(task.src),dest);break;}
+  case 'replace_string':{
+   assert.equal(task.mode,'literal');const file=resolve(task.file);const original=fs.readFileSync(file,'utf8');
+   assert.equal(original.split(task.search).length-1,1,'Pinned manifest must contain exactly one Legacy constraint');
+   fs.writeFileSync(file,original.replace(new RegExp(task.search,'g'),task.replace));break;
+  }
   case 'remove_path':fs.rmSync(resolve(task.path),{recursive:true,force:true});break;
  }
 }
 assert.equal(sql,2);
+const oxManifest=fs.readFileSync(resolve('resources/[standalone]/oxmysql/fxmanifest.lua'),'utf8');
+assert(oxManifest.includes('/server:177'));assert(!oxManifest.includes('/server:12913'));
+assert(oxManifest.includes("node_version '22'"));assert(oxManifest.includes("version '2.14.3'"));
 for(const p of ['server.cfg','resources/[local]/nst_database_config/fxmanifest.lua','resources/[local]/no_safe_turf/fxmanifest.lua','resources/[local]/no_safe_turf/web/app.js','resources/[standalone]/oxmysql/dist/build.js','resources/mapmanager/fxmanifest.lua','resources/spawnmanager/fxmanifest.lua'])assert(fs.existsSync(resolve(p)),p);
 console.log('PASS: local recipe file replay using verified upstream ZIPs; no txAdmin runtime/database deployment. Artifacts: '+path.relative(root,work));

@@ -1,8 +1,9 @@
 $engine: 3
-$minFxVersion: 12913
+# Enhanced and Legacy use different artifact build-number sequences.
+# Do not compare an Enhanced artifact against the Legacy 12913 threshold.
 $onesync: 'on'
 name: NO SAFE TURF
-version: 0.3.0
+version: 0.3.1
 author: FiveEYZ
 description: Standalone English crime and survival for FiveM Enhanced. MariaDB, gangs, robberies, police and weekly seasons. No Python required.
 
@@ -15,9 +16,9 @@ tasks:
     src: ./tmp/nst-install-policy.json
   - action: connect_database
 
-  # Upload the matching asset to the v0.3.0 GitHub Release before using this recipe.
+  # Matching prebuilt release asset; do not substitute the source-only archive.
   - action: download_file
-    url: https://github.com/FiveEYZ/NO-SAFE-TURF/releases/download/v0.3.0/no-safe-turf-txadmin.zip
+    url: https://github.com/FiveEYZ/NO-SAFE-TURF/releases/download/v0.3.1/no-safe-turf-txadmin.zip
     path: ./tmp/nst.zip
   - action: unzip
     src: ./tmp/nst.zip
@@ -36,6 +37,13 @@ tasks:
   - action: move_path
     src: ./tmp/oxmysql/oxmysql
     dest: ./resources/[standalone]/oxmysql
+  # Enhanced-only compatibility adjustment to the pinned upstream manifest.
+  # Node 22 remains required; 12913 is a Legacy artifact number, not Enhanced.
+  - action: replace_string
+    file: ./resources/[standalone]/oxmysql/fxmanifest.lua
+    mode: literal
+    search: '/server:12913'
+    replace: '/server:177'
 
   # Same base-resource source as the official Enhanced Basic Server recipe.
   - action: download_github

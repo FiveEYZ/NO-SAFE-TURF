@@ -17,5 +17,6 @@ nst-secrets.cfg
 *.private.json
 node_modules/
 dist/
+output/
 server-backups/
 *.backup.json.pending

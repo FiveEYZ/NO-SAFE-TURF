@@ -7,6 +7,22 @@ function readConfig(filename) {
   return validateConfig(JSON.parse(fs.readFileSync(filename, 'utf8').replace(/^\uFEFF/, '')),path.dirname(filename));
 }
 function connectionConfig(value) {
+  // txAdmin interpolates credentials without URL encoding. Protect delimiters
+  // in userinfo before WHATWG URL parsing; retain encoded URLs for manual setup.
+  if (typeof value === 'string' && value.startsWith('mysql://')) {
+    const at = value.lastIndexOf('@');
+    if (at >= 8) {
+      const credentials = value.slice(8, at);
+      const colon = credentials.indexOf(':');
+      const encode = part => {
+        try { return encodeURIComponent(decodeURIComponent(part)); }
+        catch { return encodeURIComponent(part); }
+      };
+      const user = colon < 0 ? credentials : credentials.slice(0, colon);
+      const password = colon < 0 ? '' : ':' + encode(credentials.slice(colon + 1));
+      value = 'mysql://' + encode(user) + password + value.slice(at);
+    }
+  }
   const url = new URL(value);
   if(url.protocol !== 'mysql:' || url.hash || [...url.searchParams].some(([key,value])=>key!=='charset'||value!=='utf8mb4')) throw new Error('Invalid database URL');
   return validateConfig({host:url.hostname.replace(/^\[|\]$/g,''),port:Number(url.port||3306),

@@ -1,4 +1,4 @@
-# NO SAFE TURF · 0.3.0
+# NO SAFE TURF · 0.3.1
 
 Standalone English crime/survival for FiveM Enhanced: two robberies, gangs, shared cash/storage, player police, arrests, death loot, hideouts, raids, territories and weekly seasons. Open F6 or /nst.
 
@@ -6,7 +6,7 @@ Standalone English crime/survival for FiveM Enhanced: two robberies, gangs, shar
 
 Use [the txAdmin recipe guide](docs/TXADMIN_RECIPE.md) for a new test profile, or [external MariaDB/manual installation](docs/MARIADB.md) for a pre-created database or existing server. Runtime requires external MariaDB 10.11+, oxmysql 2.14.3, embedded Node 22, OneSync and the matching Enhanced client/server. No Python, paid resources or frontend build is required.
 
-The recipe target is the user-provided FiveEYZ/NO-SAFE-TURF repository. The main-branch raw recipe and v0.3.0 asset returned HTTP 404 on 2026-11-16. Files are prepared locally; nothing was published. Publish only after explicit owner approval. URL installation is not verified.
+Fresh installs use the [main-branch recipe](https://raw.githubusercontent.com/FiveEYZ/NO-SAFE-TURF/main/recipe.yaml) and the versioned v0.3.1 release asset. This patch fixes raw slashes in txAdmin database passwords and removes the Legacy-only recipe build threshold. It adjusts the pinned oxmysql manifest's server constraint for Enhanced build 177 while retaining Node 22. A complete Enhanced deployment and player connection still need verification.
 
 ## Current evidence
 

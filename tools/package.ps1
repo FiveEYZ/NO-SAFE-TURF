@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$releaseName = 'no-safe-turf-0.3.0-' + (Get-Date -Format 'yyyyMMdd-HHmmss')
+$releaseName = 'no-safe-turf-0.3.1-' + (Get-Date -Format 'yyyyMMdd-HHmmss')
 $releaseRoot = Join-Path $projectRoot ('dist/' + $releaseName)
 New-Item -ItemType Directory -Path $releaseRoot | Out-Null
 function Copy-ReleaseFile([string]$relative) {

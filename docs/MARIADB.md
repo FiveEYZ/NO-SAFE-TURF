@@ -4,7 +4,7 @@
 
 The runtime path is Lua → local JavaScript storage → pinned oxmysql 2.14.3 → external MariaDB 10.11+. Existing transaction/revision logic is preserved. mysql2 3.14.1 remains bundled only for offline tools and disposable tests. No local database is an installation requirement. Never run two gameplay instances against the same database.
 
-Install the official [oxmysql 2.14.3 release](https://github.com/overextended/oxmysql/releases/tag/v2.14.3). Its manifest requires server build 12913 or newer and Node 22; choose a current Enhanced artifact, not a Legacy artifact merely meeting that number. [Official oxmysql documentation](https://overextended.dev/docs/oxmysql) recommends MariaDB. The adapter uses the pinned startTransaction API and waits for commit acknowledgement. Cfx cross-resource Promise behavior is still unverified.
+Install the official [oxmysql 2.14.3 release](https://github.com/overextended/oxmysql/releases/tag/v2.14.3). The upstream manifest requires Legacy build 12913 and Node 22. For Enhanced, the v0.3.1 recipe changes only /server:12913 to /server:177 and preserves Node 22. Apply that same manifest adjustment for a manual Enhanced install; runtime compatibility still requires testing. [Official oxmysql documentation](https://overextended.dev/docs/oxmysql) recommends MariaDB. The adapter uses the pinned startTransaction API and waits for commit acknowledgement. Cfx cross-resource Promise behavior is still unverified.
 
 ## Manual / existing-server installation
 
