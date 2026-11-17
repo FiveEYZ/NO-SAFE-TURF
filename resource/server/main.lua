@@ -50,7 +50,7 @@ local function view(src)
     table.sort(leaderboard,function(a,b)return a.score>b.score end)
     for _,n in ipairs(GetPlayers()) do people[#people+1]={id=tonumber(n),name=GetPlayerName(n)} end
     local pos=position(src); local drops={}
-    for key,d in pairs(s.drops) do if NST.near(pos,d.pos,35) then drops[#drops+1]={id=key,pos=d.pos,unlockAt=d.unlockAt} end end
+    for key,d in pairs(s.drops) do if NST.near(pos,d.pos,35) then drops[#drops+1]={id=key,pos=d.pos,unlockAt=d.unlockAt,kind=d.kind,items=NST.near(pos,d.pos,3) and d.items or nil,cash=NST.near(pos,d.pos,3) and d.cash or nil,canOpen=NST.near(pos,d.pos,3) and (d.owner==id or os.time()>=d.unlockAt)} end end
     local alerts={}
     for _,a in pairs(s.alerts or {}) do
         if (a.expiresAt or a.expires or 0)>os.time() and (p.role=='police' or a.kind=='raid') then alerts[#alerts+1]={kind=a.kind,text=a.text,pos=a.pos,expiresAt=a.expiresAt} end
@@ -61,7 +61,7 @@ local function view(src)
     for key,r in pairs(s.robberies) do robberies[key]={progress=r.actor==id and r.progress or nil,cooldown=r.cooldown,active=r.actor~=nil,mine=r.actor==id} end
     for key,t in pairs(s.territories) do territories[key]={owner=t.owner and s.gangs[t.owner] and s.gangs[t.owner].name,capture=t.capture and {ends=t.capture.ends,progress=t.capture.progress,contested=t.capture.contested}} end
     for key,h in pairs(s.hideouts) do hideouts[key]={owner=s.gangs[h.gang] and s.gangs[h.gang].name,level=h.level,raid=h.raid and {startsAt=h.raid.startsAt,endsAt=h.raid.endsAt,presence=h.raid.presence}} end
-    TriggerClientEvent('nst:state',src,{player=p,gang=ownGang,invites=invites,people=people,drops=drops,alerts=alerts,territories=territories,hideouts=hideouts,robberies=robberies,leaderboard=leaderboard,season=s.season,nextWipe=envelope.nextWipe,now=os.time()})
+    TriggerClientEvent('nst:state',src,{player=p,inventory=NST.inventoryInfo(p),gang=ownGang,invites=invites,people=people,drops=drops,alerts=alerts,territories=territories,hideouts=hideouts,robberies=robberies,leaderboard=leaderboard,season=s.season,nextWipe=envelope.nextWipe,now=os.time()})
 end
 local function broadcast()
     for _,src in ipairs(GetPlayers()) do view(tonumber(src)) end
@@ -161,7 +161,7 @@ RegisterNetEvent('nst:action',function(action,args)
             if p.role=='police' and p.alive and (p.jailUntil or 0)<=c.now then p.kit=true end
         else
             NST.assert(NST.handlers[action],NSTText('unknownAction'))
-            NST.handlers[action](s,c,clean)
+            s=NST.apply(s,c,action,clean)
         end
         commit(s,action,id)
         if identity(src)==id and sessions[src] and sessions[src].nonce==nonce then

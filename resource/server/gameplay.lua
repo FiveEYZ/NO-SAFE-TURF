@@ -37,8 +37,7 @@ local function rivalEligible(s,c,ownGang,owner)
     return rival and n>=C.captureMinPlayers
 end
 local function add(p,item,n)
-    local total=0; for _,v in pairs(p.items) do total=total+v end
-    check(total+n<=C.inventoryLimit,L.inventoryFull); p.items[item]=(p.items[item] or 0)+n
+    p.items[item]=(p.items[item] or 0)+n
 end
 local function take(p,item,n) check((p.items[item] or 0)>=n,L.notEnoughItems); p.items[item]=p.items[item]-n end
 local function hideout(s,c,p)
@@ -95,7 +94,9 @@ NST.handlers.robberyFinish=function(s,c,a)
     local p=criminal(s,c); local def=C.robberies[a.id]; local r=s.robberies[a.id]
     check(def and r and r.actor==c.id and p.robbery==a.id,L.noActiveRobbery)
     near(c,def.pos,def.radius); check((r.progress or 0)>=def.duration and c.now>=r.ends and c.now<=r.expires,L.robberyIncomplete)
-    add(p,'stolen',def.reward); r.actor=nil; p.robbery=nil
+    NST.newDrop(s,{id=c.id,now=c.now,pos=def.pos},{stolen=def.reward},def.cashReward or (a.id=='shop' and 150 or 500),'robbery')
+    r.actor=nil; p.robbery=nil
+    return NSTText('robberyLootReady')
 end
 NST.handlers.fence=function(s,c,a)
     local p=criminal(s,c); near(c,C.fence); local n=amount(a.amount); take(p,'stolen',n)
@@ -116,7 +117,7 @@ NST.handlers.hideoutBuy=function(s,c,a)
 end
 NST.handlers.hideoutStore=function(s,c,a)
     local p=criminal(s,c); local g=gang(s,p); hideout(s,c,p); local n=amount(a.amount)
-    check(a.item=='stolen' or C.prices[a.item],L.itemNotStorable); take(p,a.item,n); g.items[a.item]=(g.items[a.item] or 0)+n
+    check(a.item=='stolen' or C.prices[a.item] or (NST.inventoryRules().bags or NST.inventoryDefaults.bags)[a.item],L.itemNotStorable); take(p,a.item,n); g.items[a.item]=(g.items[a.item] or 0)+n
 end
 NST.handlers.hideoutTake=function(s,c,a)
     local p=criminal(s,c); local g=gang(s,p,c.id); hideout(s,c,p); local n=amount(a.amount)
@@ -172,4 +173,32 @@ NST.handlers.gangLeave=function(s,c)
         s.gangs[p.gang]=nil
     else g.members[c.id]=nil end
     p.gang=nil;p.gangChangeUntil=c.now+C.gangChangeCooldown
+end
+
+NST.handlers.bagBuy=function(s,c,a)
+    local p=criminal(s,c);near(c,C.shop)
+    local bag=(NST.inventoryRules().bags or NST.inventoryDefaults.bags)[a.item]
+    check(bag and p.cash>=bag.price,L.shopInsufficient)
+    p.cash=p.cash-bag.price;add(p,a.item,1)
+end
+NST.handlers.bagEquip=function(s,c,a)
+    local p=criminal(s,c)
+    check(not p.robbery and not p.raid and (p.combatUntil or 0)<=c.now,L.gangActivity)
+    local bags=NST.inventoryRules().bags or NST.inventoryDefaults.bags
+    check(a.item=='none' or bags[a.item],L.unknownItem)
+    if a.item~='none' then take(p,a.item,1) end
+    if p.bag then add(p,p.bag,1) end
+    p.bag=a.item~='none' and a.item or nil
+    NST.checkCarry(p)
+end
+NST.handlers.inventoryDrop=function(s,c,a)
+    local p=criminal(s,c);local n=amount(a.amount)
+    -- Bound persistent world containers; nearby voluntary drops from this owner merge.
+    local d
+    for _,entry in pairs(s.drops) do if entry.kind=='ground' and entry.owner==c.id and entry.expiresAt>c.now and NST.near(c.pos,entry.pos,2) then d=entry;break end end
+    if not d then local total=0;for _ in pairs(s.drops) do total=total+1 end;check(total<200,NSTText('groundFull')) end
+    if a.item=='cash' then check(p.cash>=n,L.notEnoughMoney);p.cash=p.cash-n else take(p,a.item,n) end
+    if not d then d=s.drops[NST.newDrop(s,c,{},0,'ground')] end
+    d.expiresAt=c.now+900
+    if a.item=='cash' then d.cash=d.cash+n else d.items[a.item]=(d.items[a.item] or 0)+n end
 end

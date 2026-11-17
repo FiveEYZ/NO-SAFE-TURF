@@ -72,6 +72,9 @@ RegisterNetEvent('nst:notice',function(text) SendNUIMessage({type='notice',text=
 RegisterNetEvent('nst:state',function(value)
     state=value; state.receivedAt=GetGameTimer(); SendNUIMessage({type='state',value=value,config=NSTConfig})
     local p=value.player; local ped=PlayerPedId()
+    local bag=p.bag and value.inventory and value.inventory.bags and value.inventory.bags[p.bag]
+    local drawable=bag and bag.drawable or 0
+    if drawable<GetNumberOfPedDrawableVariations(ped,5) then SetPedComponentVariation(ped,5,drawable,0,0) end
     if p.alive==false and not IsEntityDead(ped) then SetEntityHealth(ped,0) end
     local kit=p.kit==true and p.alive~=false; local bat=(p.items.bat or 0)>0 and p.alive~=false
     if lastKit~=kit or lastBat~=bat then
@@ -113,8 +116,34 @@ CreateThread(function()
                     if HasAnimDictLoaded('missminuteman_1ig_2') then TaskPlayAnim(PlayerPedId(),'missminuteman_1ig_2','handsup_base',8,-8,-1,49,0,false,false,false) end
                 end
             elseif IsEntityPlayingAnim(PlayerPedId(),'missminuteman_1ig_2','handsup_base',3) then ClearPedSecondaryTask(PlayerPedId()) end
-            for _,d in pairs(state.drops or {}) do DrawMarker(1,d.pos.x,d.pos.y,d.pos.z-1,0,0,0,0,0,0,0.6,0.6,0.4,255,190,60,160,false,false,2,false,nil,nil,false) end
+            local nearby=false
+            for _,d in pairs(state.drops or {}) do if d.canOpen then nearby=true end; DrawMarker(1,d.pos.x,d.pos.y,d.pos.z-1,0,0,0,0,0,0,0.6,0.6,0.4,255,190,60,160,false,false,2,false,nil,nil,false) end
         end
     end
 end)
 AddEventHandler('onResourceStop',function(name) if name==GetCurrentResourceName() then if spawnFrozen then FreezeEntityPosition(PlayerPedId(),false) end; SetNuiFocus(false,false); SetPlayerInvincible(PlayerId(),false) end end)
+-- Local presentation only. Server-side drop records authorize every transfer.
+local lootObjects={}
+CreateThread(function()
+    local model=joaat('prop_cs_heist_bag_02')
+    while true do
+        Wait(1000)
+        local wanted={}
+        if state then
+            RequestModel(model)
+            if HasModelLoaded(model) then
+                for _,d in pairs(state.drops or {}) do
+                    wanted[d.id]=true
+                    if not lootObjects[d.id] and d.pos then
+                        local object=CreateObject(model,d.pos.x,d.pos.y,d.pos.z-1.0,false,false,false)
+                        if object~=0 then PlaceObjectOnGroundProperly(object);FreezeEntityPosition(object,true);SetEntityCollision(object,false,false);lootObjects[d.id]=object end
+                    end
+                end
+            end
+        end
+        for id,object in pairs(lootObjects) do if not wanted[id] then DeleteEntity(object);lootObjects[id]=nil end end
+    end
+end)
+AddEventHandler('onResourceStop',function(name)
+    if name==GetCurrentResourceName() then for _,object in pairs(lootObjects) do DeleteEntity(object) end end
+end)

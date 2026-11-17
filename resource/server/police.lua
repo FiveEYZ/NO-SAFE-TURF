@@ -50,6 +50,7 @@ local function drop(s, p, pos, now, id)
     end
     local cash = math.floor((p.cash or 0) / 5)
     p.cash = (p.cash or 0) - cash
+    if p.bag then items[p.bag]=(items[p.bag] or 0)+1;p.bag=nil end
     p.items = {}
     p.kit = false
     p.vehicleRequested = false
@@ -195,13 +196,21 @@ NST.handlers.loot = function(s, ctx, a)
         s.drops[key] = nil
         return L.lootConfiscated
     end
-    local total = 0
-    for _,n in pairs(p.items) do total = total + n end
-    for _,n in pairs(d.items) do total = total + n end
-    check(total <= (NSTConfig.inventoryLimit or 80), L.inventoryFull)
-    for name,n in pairs(d.items) do p.items[name] = (p.items[name] or 0) + n end
-    p.cash = p.cash + d.cash
-    s.drops[key] = nil
+    if a.item then
+        local n=NST.amount(a.amount)
+        if a.item=='cash' then
+            check(d.cash>=n,L.lootUnavailable);d.cash=d.cash-n;p.cash=p.cash+n
+        else
+            check((d.items[a.item] or 0)>=n,L.lootUnavailable)
+            d.items[a.item]=d.items[a.item]-n;p.items[a.item]=(p.items[a.item] or 0)+n
+        end
+        local remains=d.cash>0;for _,n in pairs(d.items) do if n>0 then remains=true end end
+        if not remains then s.drops[key]=nil end
+    else
+        for name,n in pairs(d.items) do p.items[name]=(p.items[name] or 0)+n end
+        p.cash=p.cash+d.cash;s.drops[key]=nil
+    end
+    NST.checkCarry(p)
     return L.lootCollected
 end
 
@@ -271,9 +280,7 @@ NST.handlers.raid_finish = function(s, ctx, a)
     local percent = 30 - 5 * math.min(3, math.max(1, h.level or 1))
     local cash = math.floor((g.bank or 0) * percent / 100)
     local stolen = math.floor(((g.items or {}).stolen or 0) * percent / 100)
-    local total = 0
-    for _,n in pairs(p.items) do total = total + n end
-    check(r.police or total + stolen <= (NSTConfig.inventoryLimit or 80), L.inventoryFull)
+
     g.bank = (g.bank or 0) - cash
     g.items = g.items or {}
     g.items.stolen = (g.items.stolen or 0) - stolen

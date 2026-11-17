@@ -4,7 +4,7 @@ All prices and map positions are in `resource/shared/config.lua`. Money, storage
 
 ## From robbery to secured loot
 
-The store in Strawberry requires no police, takes 45 seconds of uninterrupted presence, and awards six stolen goods. The depot in La Mesa requires at least one police officer, a lockpick, and 100 seconds, and awards 16 stolen goods. Leaving the area, dying, or disconnecting cancels the robbery. Each reward can be claimed once. The store cooldown is 10 minutes and the depot cooldown is 20 minutes, including after failure. Wanted status lasts at least 10 minutes. A time gap after a restart does not count as active presence.
+The store in Strawberry requires no police, takes 45 seconds of uninterrupted presence, and creates six stolen goods and $150 in world loot. The depot in La Mesa requires at least one police officer, a lockpick, and 100 seconds, and creates 16 stolen goods and $500 in world loot. Leaving the area, dying, or disconnecting cancels the robbery. Each reward container is created once. Collect its contents nearby through Inventory before transporting them; equipped bags and all carried cash affect capacity. See INVENTORY.md. The store cooldown is 10 minutes and the depot cooldown is 20 minutes, including after failure. Wanted status lasts at least 10 minutes. A time gap after a restart does not count as active presence.
 
 Transport stolen goods to the fence at 1005, -1528 for $75 per unit, or store them in the gang hideout. Each unit sold earns one season point. The equipment shop sells lockpicks for $90, medkits for $120, and bats for $250. Players start with $500; there are no recurring free payouts. All amounts are in-game currency.
 

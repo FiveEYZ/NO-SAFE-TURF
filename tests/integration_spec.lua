@@ -12,7 +12,12 @@ local function context(id)
     for key,pos in pairs(positions) do c.online[key]={pos=pos,alive=s.players[key].alive}; if s.players[key].role=='police' and s.players[key].kit and s.players[key].alive then c.policeCount=c.policeCount+1 end end
     return c
 end
-local function act(id,name,args) s=NST.apply(s,context(id),name,args) end
+-- This progression fixture collects goods explicitly and leaves the new cash reward at the scene.
+s.players.a.bag='bag_small'
+local function act(id,name,args)
+ s=NST.apply(s,context(id),name,args)
+ if name=='robberyFinish' then s=NST.apply(s,context(id),'loot',{drop=tostring(s.nextDrop),item='stolen',amount=NSTConfig.robberies[args.id].reward}) end
+end
 local function fail(id,name,args) local before=NST.copy(s); local ok=pcall(NST.apply,s,context(id),name,args); assert(not ok,name..' accepted invalid transition'); assert(s.players[id].cash==before.players[id].cash) end
 local function advance(seconds)
     for _=1,seconds do now=now+1; local c=context('a'); NST.gameTick(s,c); NST.policeTick(s,c) end

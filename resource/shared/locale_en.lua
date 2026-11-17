@@ -1,5 +1,9 @@
 -- Shared English defaults. All player/admin wording belongs in locale modules.
 NSTLocale = {
+    inventoryTooHeavy='Not enough carrying capacity. Move less or equip a larger bag.',
+    robberyLootReady='Loot is ready at the robbery location. Approach it and open your inventory to collect it.',
+    groundFull='Too many ground containers. Collect existing loot first.',
+    openLoot='Press E to open nearby loot',
     spawnWorldUnavailable='The spawn area could not load. Please reconnect. Contact an administrator if this continues.',
     invalidAmount='Invalid amount', playerMissing='Player not found', unknownAction='Unknown action',
     newSeason='A new season has started. Please reconnect.',

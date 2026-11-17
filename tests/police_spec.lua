@@ -21,6 +21,7 @@ s=state(); a=NST.player(s,'a'); b=NST.player(s,'b'); local d=NST.player(s,'d'); 
 NST.onDeath(s,ctx('a',100)); assert(s.players.a.cash==80); assert(s.drops['1'].items.stolen==8)
 NST.onDeath(s,ctx('a',101)); assert(s.nextDrop==1)
 fails(function() NST.apply(s,ctx('b',110),'loot',{drop='1'}) end)
+s.players.b.bag='bag_small'
 s=NST.apply(s,ctx('b',121),'loot',{drop='1'}); assert(s.players.b.items.stolen==8)
 fails(function() NST.apply(s,ctx('d',121),'loot',{drop='1'}) end)
 fails(function() NST.apply(s,ctx('b',122),'loot',{drop='1'}) end)

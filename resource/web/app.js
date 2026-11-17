@@ -8,7 +8,7 @@ async function post(route,data={}){try{await fetch(`https://${GetParentResourceN
 const act=(action,args={})=>post('action',{action,args});
 function notice(text){$('toast').textContent=text;$('toast').style.display='block';clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>$('toast').style.display='none',6000);}
 function button(parent,label,fn){const b=el('button',label);b.type='button';b.onclick=fn;parent.append(b);return b;}
-function card(title,description){const n=el('article',undefined,'card');n.append(el('h2',title));if(description)n.append(el('p',description));$('content').append(n);return n;}
+function card(title,description,parent=$('content')){const n=el('article',undefined,'card');n.append(el('h2',title));if(description)n.append(el('p',description));parent.append(n);return n;}
 function input(parent,label,type='text',value=''){const n=el('input');n.type=type;n.placeholder=label;n.setAttribute('aria-label',label);n.value=value;if(type==='number'){n.min='1';n.max='1000000';}parent.append(n);return n;}
 function row(parent){const n=el('div',undefined,'row');parent.append(n);return n;}
 function gps(parent,group,id){button(parent,L.go,()=>post('waypoint',{group,id}));}
@@ -18,6 +18,8 @@ function render(){
  const oldInputs=[...$('content').querySelectorAll('input')];
  const sameForm=renderedTab===tab && renderedGang===Boolean(state.gang);
  const saved=sameForm?oldInputs.map(n=>n.value):[];
+ const keyed=new Map(oldInputs.filter(n=>n.nstKey).map(n=>[n.nstKey,n.value]));
+ const focusKey=document.activeElement?.nstKey;
  const focused=oldInputs.indexOf(document.activeElement);const cursor=focused>=0?oldInputs[focused].selectionStart:null;
  const p=state.player;const jailed=p.jailUntil>state.now;const wanted=p.wantedUntil>state.now;
  $('status').textContent=`$${p.cash} · ${p.alive===false?L.dead:jailed?L.jail:wanted?L.wanted:L[p.role]}`;
@@ -28,7 +30,7 @@ function render(){
   card(L.tabs.street,L.rules);
   for(const [id,d] of Object.entries(config.robberies)){const status=state.robberies?.[id];const c=card(d.label,`${d.duration} s · ${d.reward} ${L.stolen.toLowerCase()} · ${d.police} ${L.officers}`);if(status)c.append(el('p',status.mine?`${L.progress}: ${status.progress||0} / ${d.duration} s`:`${L.cooldown}: ${Math.max(0,(status.cooldown||0)-state.now)} s`));const r=row(c);gps(r,'robberies',id);button(r,L.start,()=>act('robberyStart',{id}));button(r,L.finish,()=>act('robberyFinish',{id}));}
   let c=card(L.fencePlace);let r=row(c);const n=input(r,L.amount,'number',1);gps(r,'fence');button(r,L.fence,()=>act('fence',{amount:Number(n.value)}));
-  c=card(L.shop);gps(c,'shop');for(const [item,price] of Object.entries(config.prices))button(row(c),`${L.buy} ${itemName(item)} · $${price}`,()=>act('shopBuy',{item,amount:1}));
+  c=card(L.shop);gps(c,'shop');for(const [item,bag] of Object.entries(state.inventory?.bags||{}))button(row(c),`${L.buy} ${itemName(item)} · ${bag.price} · ${bag.capacity/1000} kg`,()=>act('bagBuy',{item}));for(const [item,price] of Object.entries(config.prices))button(row(c),`${L.buy} ${itemName(item)} · $${price}`,()=>act('shopBuy',{item,amount:1}));
  }
  if(tab==='gang'){
   const g=state.gang;let c=card(g?g.name:L.tabs.gang,g?`${L.bank}: $${g.bank} · ${L.score}: ${g.score} · ${L.role}: ${L[g.role]}`:L.noGang);
@@ -46,18 +48,44 @@ function render(){
   c=card(L.alerts);for(const a of state.alerts)c.append(el('p',a.text||a.kind));
  }
  if(tab==='inventory'){
-  const c=card(L.tabs.inventory,L.inventoryRules);button(c,L.respawn,()=>act('respawn'));button(c,L.surrender,()=>act('surrender'));
-  for(const [item,n] of Object.entries(p.items)){if(n<=0)continue;const r=row(c);r.append(el('span',`${itemName(item)}: ${n}`));button(r,L.store,()=>act('hideoutStore',{item,amount:1}));if(item==='medkit')button(r,L.use,()=>act('useItem',{item}));}
-  for(const d of state.drops)button(row(c),`${L.loot} #${d.id}`,()=>act('loot',{drop:d.id}));
+  const inv=state.inventory||{weight:0,capacity:8000,bags:{}};
+  const head=card(L.carrying,L.carryRules);
+  head.append(el('div',`${(inv.weight/1000).toFixed(2)} / ${inv.capacity/1000} kg · ${L.equipped}: ${itemName(inv.bag||'pockets')}`,'stat'));
+  const meter=el('progress');meter.max=inv.capacity;meter.value=inv.weight;meter.setAttribute('aria-label',L.carrying);head.append(meter);
+  if(inv.bag)button(head,L.unequip,()=>act('bagEquip',{item:'none'}));
+  const columns=el('div',undefined,'inventoryColumns');$('content').append(columns);
+  const carried=card(L.tabs.inventory,L.inventoryRules,columns),ground=card(L.nearbyLoot,L.openNearby,columns);
+  function transfer(parent,item,n,action,extra={}){
+   const entry=el('div',undefined,'itemEntry');parent.append(entry);
+   entry.append(el('strong',item==='cash'?`${L.cash}: $${n}`:`${itemName(item)} × ${n}`));
+   const r=row(entry),quantity=input(r,L.amount,'number',1);quantity.max=String(Math.min(n,1000000));quantity.nstKey=action+':'+(extra.drop||'carried')+':'+item;
+   button(r,action==='loot'?L.collect:L.drop,()=>act(action,{...extra,item,amount:Number(quantity.value)}));
+   if(action==='inventoryDrop'&&item!=='cash'){
+    button(r,L.store,()=>act('hideoutStore',{item,amount:Number(quantity.value)}));
+    if(inv.bags[item])button(r,L.equip,()=>act('bagEquip',{item}));
+    if(item==='medkit')button(r,L.use,()=>act('useItem',{item}));
+   }
+  }
+  if(p.cash>0)transfer(carried,'cash',p.cash,'inventoryDrop');
+  for(const [item,n] of Object.entries(p.items))if(n>0)transfer(carried,item,n,'inventoryDrop');
+  for(const d of state.drops){
+   const box=el('div',undefined,'lootContainer');ground.append(box);box.append(el('h3',`${L.nearbyLoot} #${d.id}`));
+   if(!d.canOpen){box.append(el('p',L.lootLocked));continue;}
+   if(p.role==='police'){button(box,L.loot,()=>act('loot',{drop:d.id}));continue;}
+   if(d.cash>0)transfer(box,'cash',d.cash,'loot',{drop:d.id});
+   for(const [item,n] of Object.entries(d.items||{}))if(n>0)transfer(box,item,n,'loot',{drop:d.id});
+  }
+  button(carried,L.respawn,()=>act('respawn'));button(carried,L.surrender,()=>act('surrender'));
  }
  if(tab==='territory'){
   card(L.tabs.territory,L.territoryRules);for(const [id,d] of Object.entries(config.territories)){const t=state.territories[id];const c=card(d.label,`${t?.owner||L.unowned}${t?.capture?' · '+(t.capture.progress||0)+' / '+config.captureSeconds+' s'+(t.capture.contested?' · '+L.contested:''):''}`);const r=row(c);gps(r,'territories',id);button(r,L.capture,()=>act('territoryStart',{id}));}
  }
  if(tab==='ranking'){const c=card(L.tabs.ranking);const table=el('table');state.leaderboard.forEach((g,i)=>{const r=el('tr');r.append(el('td',i+1),el('td',g.name),el('td',g.score));table.append(r);});c.append(table);}
  if(tab==='gang'||tab==='police'){const c=card(L.members);for(const person of state.people)c.append(el('p',`${person.id} · ${person.name}`));}
- const inputs=[...$('content').querySelectorAll('input')];inputs.forEach((n,i)=>{if(saved[i]!==undefined)n.value=saved[i];});
- if(sameForm&&focused>=0&&inputs[focused]){inputs[focused].focus();if(cursor!==null&&inputs[focused].type==='text')inputs[focused].setSelectionRange(cursor,cursor);}
+ const inputs=[...$('content').querySelectorAll('input')];inputs.forEach((n,i)=>{if(n.nstKey){if(sameForm&&keyed.has(n.nstKey))n.value=keyed.get(n.nstKey);}else if(saved[i]!==undefined)n.value=saved[i];});
+ const focusTarget=focusKey?inputs.find(n=>n.nstKey===focusKey):inputs[focused];
+ if(sameForm&&focused>=0&&focusTarget){focusTarget.focus();if(cursor!==null&&focusTarget.type==='text')focusTarget.setSelectionRange(cursor,cursor);}
  renderedTab=tab;renderedGang=Boolean(state.gang);
 }
 $('close').onclick=()=>post('close');document.addEventListener('keydown',e=>{if(e.key==='Escape')post('close');});
-window.addEventListener('message',e=>{const m=e.data;if(m.type==='open'){$('menu').hidden=!m.value;render();}if(m.type==='notice')notice(m.text);if(m.type==='state'){state=m.value;config=m.config;render();}});
+window.addEventListener('message',e=>{const m=e.data;if(m.type==='open'){if(m.tab)tab=m.tab;$('menu').hidden=!m.value;render();}if(m.type==='notice')notice(m.text);if(m.type==='state'){state=m.value;config=m.config;render();}});

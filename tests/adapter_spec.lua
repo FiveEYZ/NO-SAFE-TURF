@@ -90,6 +90,11 @@ handlers['txAdmin:events:playerHealed']({target=1,author='test'});step();assert(
 invoking='monitor';handlers['txAdmin:events:playerHealed']({target=1,author='test'});step()
 assert(db.state.players['license:a'].alive and db.state.players['license:a'].cash==cash and db.state.nextDrop==countDrops)
 assert(eventCount('nst:adminRevive',1)==1)
+-- The live event path must enforce the same capacity invariant as pure transitions.
+NST.handlers.testInventoryOverflow=function(s,c) s.players[c.id].cash=1000000 end
+local beforeCash=db.state.players['license:a'].cash;local beforeRevision=db.revision
+action(1,'testInventoryOverflow');assert(db.state.players['license:a'].cash==beforeCash and db.revision==beforeRevision)
+NST.handlers.testInventoryOverflow=nil
 -- A scheduled wipe committed behind a failed read is reconciled on later reload.
 players[1].health=200;now=1300;timer=300000;stateLostWipe=true;step();local beforeKicks=#droppedMessages
 step();assert(#droppedMessages>beforeKicks and droppedMessages[#droppedMessages]==NSTText('newSeason'))

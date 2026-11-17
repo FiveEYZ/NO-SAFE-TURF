@@ -1,5 +1,10 @@
 // English is the default interface language.
 window.L = {
+  bag_small:'Small bag',bag_medium:'Backpack',bag_large:'Large duffel',pockets:'Pockets',
+  carrying:'Carrying',equipped:'Equipped',equip:'Equip',unequip:'Remove bag',drop:'Drop on ground',
+  nearbyLoot:'Nearby loot',collect:'Collect',openNearby:'Approach a loot marker to transfer items.',
+  lootLocked:'Move within 3 meters and wait for owner priority to expire.',
+  carryRules:'All cash and items take space. Larger bags increase capacity. Transfers require proximity.',
   "connecting": "Connecting...",
   "menuHint": "F6 · Menu",
   "settingLabel": "LOS SANTOS / SURVIVAL",
@@ -70,10 +75,10 @@ window.L = {
   "unowned": "Unclaimed",
   "level": "Level",
   "activeRaid": "Raid in progress",
-  "rules": "Stay at the robbery target until the timer ends. Finish the robbery, then take the stolen goods to a fence or hideout. Use GPS to find each location.",
+  "rules": "Stay at the robbery target until the timer ends. Finish the robbery, collect the physical loot, then carry it to a fence or hideout. Use GPS to find each location.",
   "policeRules": "Arrests require a wanted suspect with raised hands within three meters. Police batons and patrol vehicles cannot be sold.",
   "raidRules": "Raids require 60 seconds of warning and at least 60 seconds at the target. Offline protection lasts 15 minutes after the last defender leaves.",
-  "inventoryRules": "On death, you drop all items and 20% of your cash. Respawn after 15 seconds.",
+  "inventoryRules": "On death, you drop all items, your equipped bag and 20% of your cash. Respawn after 15 seconds.",
   "territoryRules": "Hold the zone for the configured capture duration. A rival must be online; owned zones require an online defender. Contesting resets progress. Each gang scores once per zone per season.",
   "contested": "Contested",
   "requestFailed": "Could not contact the game.",

@@ -1,6 +1,7 @@
 dofile('resource/server/core.lua')
 dofile('resource/shared/config.lua')
 dofile('resource/server/gameplay.lua')
+dofile('resource/server/police.lua')
 local function state() return {players={},gangs={},territories={},robberies={},hideouts={},drops={},alerts={},season=1} end
 local function ctx(id,pos) return {id=id,now=1000,pos=pos or NSTConfig.robberies.shop.pos,online={},policeCount=1} end
 local function reject(s,c,action,args) local ok=pcall(NST.apply,s,c,action,args); assert(not ok,action..' should reject') end
@@ -8,7 +9,8 @@ local s=state(); local c=ctx('a'); NST.player(s,'a')
 s=NST.apply(s,c,'robberyStart',{id='shop'})
 reject(s,c,'robberyFinish',{id='shop'})
 for i=1,45 do c.now=1000+i; c.online.a={pos=c.pos,alive=true}; NST.gameTick(s,c) end
-s=NST.apply(s,c,'robberyFinish',{id='shop'}); assert(s.players.a.items.stolen==6)
+s=NST.apply(s,c,'robberyFinish',{id='shop'}); assert(not s.players.a.items.stolen)
+s=NST.apply(s,c,'loot',{drop=tostring(s.nextDrop),item='stolen',amount=6}); assert(s.players.a.items.stolen==6)
 reject(s,c,'robberyFinish',{id='shop'}); assert(s.players.a.items.stolen==6)
 reject(s,c,'fence',{amount=6}); c.pos=NSTConfig.fence
 s=NST.apply(s,c,'fence',{amount=6}); assert(s.players.a.cash==950 and s.players.a.items.stolen==0)

@@ -52,6 +52,14 @@ async function run(){
   switchTab('police');assert(nodes.content.textContent.includes('<script>evil()</script>'));assert.equal(nodes.content.querySelectorAll('script').length,0);
   input(L.target).value='2';await click('content',L.arrest);assert.deepEqual(last(),{action:'police_arrest',args:{target:2}});
   switchTab('inventory');await click('content',L.use);assert.deepEqual(last(),{action:'useItem',args:{item:'medkit'}});
+  fixture.inventory={weight:500,capacity:8000,bags:{bag_small:{capacity:18000,price:150}}};
+  fixture.drops=[{id:'loot-a',canOpen:true,cash:150,items:{stolen:3}}];snapshot();
+  await click('content',L.collect);assert.deepEqual(last(),{action:'loot',args:{drop:'loot-a',item:'cash',amount:1}});
+  await click('content',L.drop);assert.deepEqual(last(),{action:'inventoryDrop',args:{item:'cash',amount:1}});
+  const lootQuantity=nodes.content.querySelectorAll('input').find(n=>n.nstKey==='loot:loot-a:stolen');lootQuantity.value='3';lootQuantity.focus();
+  fixture.drops[0].cash=0;snapshot();
+  assert.equal(nodes.content.querySelectorAll('input').find(n=>n.nstKey==='loot:loot-a:stolen').value,'3');
+  assert.equal(document.activeElement.nstKey,'loot:loot-a:stolen');
   switchTab('territory');assert(nodes.content.textContent.includes('50 / 180 s'));await click('content',L.capture);assert.deepEqual(last(),{action:'territoryStart',args:{id:'davis'}});
   switchTab('ranking');assert(nodes.content.textContent.includes('<img onerror=evil()>'));assert.equal(nodes.content.querySelectorAll('img').length,0);
   message({type:'notice',text:'<b>Rejected</b>'});assert.equal(nodes.toast.textContent,'<b>Rejected</b>');assert.equal(nodes.toast.querySelectorAll('b').length,0);
