@@ -1,8 +1,8 @@
-# Grid inventory, rarity and physical firearms — v0.7.0
+# Grid inventory, rarity and physical firearms — v0.7.1
 
 ## Inventory controls
 
-Open F6 → Inventory, or press E beside accessible world loot. Nearby loot is on the left, your bag is in the middle and equipment is on the right. The icons are original local SVG artwork; no reference-game art is distributed.
+Open the standalone inventory with TAB or /nst_inventory, or press E beside accessible world loot. Close with TAB, Escape or the close button. F6 / /nst opens the separate gameplay menu; inventory is no longer a tab there. The inventory key can be rebound in FiveM key bindings under NO SAFE TURF: open inventory. If txAdmin also uses TAB, rebind one of them to avoid a collision. The default GTA weapon wheel is disabled while this resource runs. Nearby loot is on the left, your bag is in the middle and equipment is on the right. The icons are original local SVG artwork; no reference-game art is distributed.
 
 Select an item to inspect its quantity, footprint, rarity and base sale value. Drag it within your bag, or select it and click a destination cell. Press R or Rotate before placing it to rotate 90 degrees. The preview shows valid or blocked placement. You can also drag a nearby loot stack into a free location in your bag; Collect automatically finds space. Failed transfers leave the source unchanged. You cannot rearrange somebody else's world container, but can choose where its contents go in your bag.
 

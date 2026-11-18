@@ -1,7 +1,9 @@
 /* Local NUI only: strings are rendered with textContent, never HTML. */
+let uiMode='menu',menuTab='street';
 let state,config,tab='street',noticeTimer,renderedTab,renderedGang;
-const $=id=>document.getElementById(id);
+const $=id=>document.getElementById(id==='content'&&uiMode==='inventory'?'inventoryContent':id);
 for(const id of ['menuHint','settingLabel','tagline'])if($(id))$(id).textContent=L[id];
+$('inventoryTitle').textContent=L.inventoryTitle;$('inventoryHelp').textContent=L.inventoryHelp;$('inventoryClose').setAttribute('aria-label',L.closeLabel);
 $('status').textContent=L.connecting;$('close').setAttribute('aria-label',L.closeLabel);
 const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
 async function post(route,data={}){try{await fetch(`https://${GetParentResourceName()}/${route}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});}catch{notice(L.requestFailed);}}
@@ -26,7 +28,7 @@ function render(){
  $('status').textContent=`$${p.cash} · ${p.alive===false?L.dead:jailed?L.jail:wanted?L.wanted:L[p.role]}`;
  $('season').textContent=`${L.season} ${state.season} · ${L.wipe}: ${new Date(state.nextWipe*1000).toLocaleString('en-US',{timeZone:'Europe/Stockholm'})} (Stockholm)`;
  $('content').replaceChildren();$('tabs').replaceChildren();
- Object.entries(L.tabs).forEach(([id,label])=>{const b=button($('tabs'),label,()=>{tab=id;render();});b.classList.toggle('active',tab===id);});
+ Object.entries(L.tabs).filter(([id])=>id!=='inventory').forEach(([id,label])=>{const b=button($('tabs'),label,()=>{tab=id;menuTab=id;render();});b.classList.toggle('active',tab===id);});
  if(tab==='street'){
   card(L.tabs.street,L.rules);
   for(const [id,d] of Object.entries(config.robberies)){const status=state.robberies?.[id];const c=card(d.label,`${d.duration} s · ${d.reward} ${L.stolen.toLowerCase()} · ${d.police} ${L.officers}`);if(status)c.append(el('p',status.mine?`${L.progress}: ${status.progress||0} / ${d.duration} s`:`${L.cooldown}: ${Math.max(0,(status.cooldown||0)-state.now)} s`));const r=row(c);gps(r,'robberies',id);button(r,L.start,()=>act('robberyStart',{id}));button(r,L.finish,()=>act('robberyFinish',{id}));}
@@ -89,8 +91,9 @@ function render(){
  if(sameForm&&focused>=0&&focusTarget){focusTarget.focus();if(cursor!==null&&focusTarget.type==='text')focusTarget.setSelectionRange(cursor,cursor);}
  renderedTab=tab;renderedGang=Boolean(state.gang);
 }
-$('close').onclick=()=>post('close');document.addEventListener('keydown',e=>{if(e.key==='Escape')post('close');if((e.key==='r'||e.key==='R')&&gridSelection&&document.activeElement?.tagName!=='INPUT'){e.preventDefault();rotateGridSelection();}});
-window.addEventListener('message',e=>{const m=e.data;if(m.type==='open'){$('hud').hidden=m.value;if(!m.value){gridDragging=false;gridSelection=null;}if(m.tab)tab=m.tab;$('menu').hidden=!m.value;render();}if(m.type==='notice')notice(m.text);if(m.type==='state'){state=m.value;config=m.config;if(!gridDragging)render();}});
+$('close').onclick=()=>post('close');$('inventoryClose').onclick=()=>post('close');document.addEventListener('keydown',e=>{if(e.key==='Escape'||(e.key==='Tab'&&uiMode==='inventory'&&!e.repeat)){e.preventDefault?.();post('close');}if((e.key==='r'||e.key==='R')&&gridSelection&&document.activeElement?.tagName!=='INPUT'){e.preventDefault();rotateGridSelection();}});
+window.addEventListener('message',e=>{const m=e.data;if(m.type==='open'){$('hud').hidden=m.value;if(!m.value){gridDragging=false;gridSelection=null;}if(m.value){uiMode=m.mode==='inventory'?'inventory':'menu';tab=uiMode==='inventory'?'inventory':menuTab;}
+$('menu').hidden=!m.value||uiMode!=='menu';$('inventoryWindow').hidden=!m.value||uiMode!=='inventory';render();}if(m.type==='notice')notice(m.text);if(m.type==='state'){state=m.value;config=m.config;if(!gridDragging)render();}});
 // Tetris inventory. The server owns placements; the browser only previews requests.
 let gridSelection=null,gridDragging=false;
 function inventoryIcon(item){

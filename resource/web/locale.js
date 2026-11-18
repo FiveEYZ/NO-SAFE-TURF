@@ -1,5 +1,6 @@
 // English is the default interface language.
 window.L = {
+ inventoryTitle:'Inventory',inventoryHelp:'TAB / ESC · Close     R · Rotate selected item     Drag · Move or transfer',
  gridTransferHint:'SELECT TO TRANSFER',gridInstructions:'Drag an item, or select it and click a cell. R rotates before placement.',
  gridEquipmentHint:'ACTIVE LOADOUT',gridOverflow:'OVERFLOW — unload or rearrange. No items were deleted.',
  equipment:'Equipment',rotate:'Rotate · R',holster:'Holster',selectItem:'Select an item to inspect, rotate or transfer it.',baseValue:'Base sale value',
@@ -10,7 +11,7 @@ window.L = {
   lootLocked:'Move within 3 meters and wait for owner priority to expire.',
   carryRules:'All cash and items take space. Larger bags increase capacity. Transfers require proximity.',
   "connecting": "Connecting...",
-  "menuHint": "F6 · Menu",
+  "menuHint": "F6 · Menu / TAB · Inventory",
   "settingLabel": "LOS SANTOS / SURVIVAL",
   "tagline": "No ground is safe.",
   "closeLabel": "Close",

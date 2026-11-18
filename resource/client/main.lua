@@ -54,12 +54,19 @@ CreateThread(function()
     for _,d in pairs(NSTConfig.territories) do blip(d.pos,d.label,437,47) end
     blip(NSTConfig.fence,NSTText('fence'),500,2); blip(NSTConfig.shop,NSTText('equipment'),110,2); blip(NSTConfig.policeStation,NSTText('policeDuty'),60,3)
 end)
-RegisterCommand('nst',function()
+local openedMode=nil
+local function openInterface(mode)
     if not opened and IsNuiFocused() then return end
-    opened=not opened; SetNuiFocus(opened,opened); SendNUIMessage({type='open',value=opened}); if opened then send('sync') end
-end,false)
+    local show=not opened or openedMode~=mode
+    opened=show;openedMode=show and mode or nil
+    SetNuiFocus(show,show);SendNUIMessage({type='open',value=show,mode=mode})
+    if show then send('sync') end
+end
+RegisterCommand('nst',function() openInterface('menu') end,false)
+RegisterCommand('nst_inventory',function() openInterface('inventory') end,false)
 RegisterKeyMapping('nst',NSTText('menuBinding'),'keyboard','F6')
-RegisterNUICallback('close',function(_,cb) opened=false; SetNuiFocus(false,false); SendNUIMessage({type='open',value=false}); cb({ok=true}) end)
+RegisterKeyMapping('nst_inventory',NSTText('inventoryBinding'),'keyboard','TAB')
+RegisterNUICallback('close',function(_,cb) opened=false;openedMode=nil;SetNuiFocus(false,false);SendNUIMessage({type='open',value=false});cb({ok=true}) end)
 RegisterNUICallback('action',function(data,cb)
     if type(data)=='table' then send(data.action,data.args) end; cb({ok=true})
 end)
@@ -104,6 +111,7 @@ end)
 CreateThread(function()
     while true do
         Wait(0)
+        DisableControlAction(0,37,true) -- Inventory replaces the default weapon wheel.
         SetPlayerWantedLevel(PlayerId(),0,false); SetPlayerWantedLevelNow(PlayerId(),false)
         SetDispatchCopsForPlayer(PlayerId(),false)
         for i=1,15 do EnableDispatchService(i,false) end
@@ -130,7 +138,7 @@ CreateThread(function()
             for _,d in pairs(state.drops or {}) do if d.canOpen then nearby=true end; DrawMarker(1,d.pos.x,d.pos.y,d.pos.z-1,0,0,0,0,0,0,0.6,0.6,0.4,255,190,60,160,false,false,2,false,nil,nil,false) end
             if nearby and not opened and not IsNuiFocused() then
                 BeginTextCommandDisplayHelp('STRING');AddTextComponentSubstringPlayerName(NSTText('openLoot'));EndTextCommandDisplayHelp(0,false,false,-1)
-                if IsControlJustReleased(0,38) then opened=true;SetNuiFocus(true,true);SendNUIMessage({type='open',value=true,tab='inventory'});send('sync') end
+                if IsControlJustReleased(0,38) then openInterface('inventory') end
             end
         end
     end

@@ -1,6 +1,6 @@
 {
   "name": "no-safe-turf",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "private": true,
   "description": "NO SAFE TURF server-side MariaDB storage",
   "license": "MIT",

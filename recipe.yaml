@@ -3,7 +3,7 @@ $engine: 3
 # Do not compare an Enhanced artifact against the Legacy 12913 threshold.
 $onesync: 'on'
 name: NO SAFE TURF
-version: 0.7.0
+version: 0.7.1
 author: FiveEYZ
 description: Standalone English crime and survival for FiveM Enhanced. MariaDB, gangs, robberies, police and weekly seasons. No Python required.
 
@@ -18,7 +18,7 @@ tasks:
 
   # Matching prebuilt release asset; do not substitute the source-only archive.
   - action: download_file
-    url: https://github.com/FiveEYZ/NO-SAFE-TURF/releases/download/v0.7.0/no-safe-turf-txadmin.zip
+    url: https://github.com/FiveEYZ/NO-SAFE-TURF/releases/download/v0.7.1/no-safe-turf-txadmin.zip
     path: ./tmp/nst.zip
   - action: unzip
     src: ./tmp/nst.zip

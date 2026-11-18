@@ -3,17 +3,25 @@ local focused=true;local focusChanges=0;local sends=0
 function RegisterCommand(name,fn) commands[name]=fn end
 function RegisterNUICallback(name,fn) callbacks[name]=fn end
 function RegisterNetEvent(name,fn) events[name]=fn end
-function RegisterKeyMapping() end
+local bindings={}
+function RegisterKeyMapping(command,_,_,key) bindings[command]=key end
 function AddEventHandler() end
 function CreateThread(fn) threads[#threads+1]=fn end
 function IsNuiFocused() return focused end
 function SetNuiFocus(value) focused=value;focusChanges=focusChanges+1 end
-function SendNUIMessage() end
+local lastMessage
+function SendNUIMessage(m) lastMessage=m end
 function TriggerServerEvent() sends=sends+1 end
 dofile('resource/client/main.lua')
 commands.nst();assert(focusChanges==0 and sends==0,'must not steal txAdmin NUI focus')
 focused=false;commands.nst();assert(focusChanges==1 and sends==1 and focused)
 commands.nst();assert(focusChanges==2 and not focused)
+assert(bindings.nst_inventory=='TAB' and bindings.nst=='F6')
+focused=true;local prior=sends;commands.nst_inventory();assert(sends==prior,'inventory must respect another NUI')
+focused=false;commands.nst_inventory();assert(focused and lastMessage.mode=='inventory' and lastMessage.value)
+commands.nst();assert(focused and lastMessage.mode=='menu' and lastMessage.value,'switch interfaces without losing own focus')
+commands.nst_inventory();assert(lastMessage.mode=='inventory' and lastMessage.value)
+commands.nst_inventory();assert(not focused and not lastMessage.value)
 local appearance={};local spawnCallback
 local frozen=false;local collisionChecks=0;local groundAvailable=true;local position
 function FreezeEntityPosition(_,value) frozen=value end

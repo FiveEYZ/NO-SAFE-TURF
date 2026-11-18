@@ -1,5 +1,6 @@
 -- Shared English defaults. All player/admin wording belongs in locale modules.
 NSTLocale = {
+    inventoryBinding='NO SAFE TURF: open inventory',
     gunfireAlert='Gunfire reported',
     inventoryChanged='Inventory changed. Select the item again.',
     invalidPlacement='That item does not fit here. Move or rotate it.',
