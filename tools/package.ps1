@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 & node (Join-Path $PSScriptRoot 'build-update.js')
 if ($LASTEXITCODE -ne 0) { throw 'Update bundle build failed.' }
-$releaseName = 'no-safe-turf-0.7.1-' + (Get-Date -Format 'yyyyMMdd-HHmmss')
+$releaseName = 'no-safe-turf-0.7.2-' + (Get-Date -Format 'yyyyMMdd-HHmmss')
 $releaseRoot = Join-Path $projectRoot ('dist/' + $releaseName)
 New-Item -ItemType Directory -Path $releaseRoot | Out-Null
 function Copy-ReleaseFile([string]$relative) {

@@ -95,7 +95,7 @@ $('close').onclick=()=>post('close');$('inventoryClose').onclick=()=>post('close
 window.addEventListener('message',e=>{const m=e.data;if(m.type==='open'){$('hud').hidden=m.value;if(!m.value){gridDragging=false;gridSelection=null;}if(m.value){uiMode=m.mode==='inventory'?'inventory':'menu';tab=uiMode==='inventory'?'inventory':menuTab;}
 $('menu').hidden=!m.value||uiMode!=='menu';$('inventoryWindow').hidden=!m.value||uiMode!=='inventory';render();}if(m.type==='notice')notice(m.text);if(m.type==='state'){state=m.value;config=m.config;if(!gridDragging)render();}});
 // Tetris inventory. The server owns placements; the browser only previews requests.
-let gridSelection=null,gridDragging=false;
+let gridSelection=null,gridDragging=false,gridGrab={x:0,y:0};
 function inventoryIcon(item){
  const paths={
   cash:'M5 16h54v32H5z M12 22h40v20H12z M32 24a8 8 0 1 0 0 16a8 8 0 1 0 0-16',
@@ -141,8 +141,13 @@ function renderGridInventory(p,inv){
   tile.append(icon,el('span',label,'gridItemName'),el('b',e.item==='cash'?'$'+e.amount:e.amount>1?String(e.amount):'','gridQuantity'));
   if(gridSelection?.id===e.id&&gridSelection.source===source)tile.classList.add('selected');
   tile.onclick=()=>selectGridEntry(e,source,revision);
-  tile.ondragstart=event=>{gridDragging=true;gridSelection={...e,source,revision};event.dataTransfer.setData('text/plain',e.id);event.dataTransfer.effectAllowed='move';};
-  tile.ondragend=()=>{gridDragging=false;render();};
+  tile.ondragstart=event=>{
+   const selected=gridSelection?.id===e.id&&gridSelection.source===source?gridSelection:{...e,source,revision};
+   const rect=tile.getBoundingClientRect();
+   gridGrab=selected.rotated===e.rotated?{x:Math.max(0,Math.min(e.w-1,Math.floor((event.clientX-rect.left)/rect.width*e.w))),y:Math.max(0,Math.min(e.h-1,Math.floor((event.clientY-rect.top)/rect.height*e.h)))}:{x:0,y:0};
+   gridDragging=true;gridSelection=selected;event.dataTransfer.setData('text/plain',e.id);event.dataTransfer.effectAllowed='move';
+  };
+  tile.ondragend=()=>{gridDragging=false;gridGrab={x:0,y:0};render();};
   return tile;
  }
  function buildGrid(panel,cols,rows,entries,source,revision){
@@ -152,7 +157,7 @@ function renderGridInventory(p,inv){
   entries.filter(e=>!e.overflow).forEach(e=>board.append(itemTile(e,source,revision)));
   if(source!=='carried')return;
   const ghost=el('div',undefined,'gridGhost');ghost.hidden=true;board.append(ghost);
-  function target(event){const rect=board.getBoundingClientRect();return {x:Math.floor((event.clientX-rect.left)/(rect.width/cols)),y:Math.floor((event.clientY-rect.top)/(rect.height/rows))};}
+  function target(event){const rect=board.getBoundingClientRect();return {x:Math.floor((event.clientX-rect.left)/(rect.width/cols))-(gridDragging?gridGrab.x:0),y:Math.floor((event.clientY-rect.top)/(rect.height/rows))-(gridDragging?gridGrab.y:0)};}
   function preview(event){
    if(!gridSelection)return null;
    const at=target(event),e=gridSelection;
@@ -168,7 +173,7 @@ function renderGridInventory(p,inv){
  }
  title(ground,L.nearbyLoot,L.gridTransferHint);
  const nearby=state.drops.filter(d=>d.canOpen);
- if(!nearby.length)ground.append(el('p',L.openNearby));
+ ground.hidden=nearby.length===0;
  for(const d of nearby){
   const label=el('div',undefined,'containerHeading');label.append(el('span',L.loot+' #'+d.id),el('span',Math.max(0,Math.ceil(((d.expiresAt||state.now)-state.now)/60))+' min'));ground.append(label);
   if(p.role==='police'){button(ground,L.loot,()=>act('loot',{drop:d.id}));continue;}

@@ -71,6 +71,14 @@ async function run(){
   boards[0].ondrop({clientX:160,clientY:10,preventDefault(){}});
   assert.deepEqual(last(),{action:'inventoryMove',args:{entry:'stolen:1',x:3,y:0,rotated:1,revision:7}});
   documentEvents.keydown({key:'Tab',preventDefault(){}});assert.equal(calls.at(-1).url,'https://no_safe_turf/close');
+  snapshot();
+  const dragTile=content().querySelectorAll('button').find(n=>n.attributes['aria-label']==='Stolen goods · 2×1 · common');
+  dragTile.getBoundingClientRect=()=>({left:0,top:0,width:100,height:50});
+  dragTile.ondragstart({clientX:75,clientY:20,dataTransfer:{setData(){}}});
+  const dragBoard=content().querySelectorAll('div').find(n=>n.ondrop);dragBoard.getBoundingClientRect=()=>({left:0,top:0,width:200,height:200});
+  snapshot();assert.equal(content().querySelectorAll('div').find(n=>n.ondrop),dragBoard,'snapshot must not replace active drag');
+  dragBoard.ondrop({clientX:125,clientY:125,preventDefault(){}});assert.deepEqual(last(),{action:'inventoryMove',args:{entry:'stolen:1',x:1,y:2,rotated:0,revision:7}});
+  dragTile.ondragend();
   switchTab('territory');assert(content().textContent.includes('50 / 180 s'));await click('content',L.capture);assert.deepEqual(last(),{action:'territoryStart',args:{id:'davis'}});
   switchTab('ranking');assert(content().textContent.includes('<img onerror=evil()>'));assert.equal(content().querySelectorAll('img').length,0);
   message({type:'notice',text:'<b>Rejected</b>'});assert.equal(nodes.toast.textContent,'<b>Rejected</b>');assert.equal(nodes.toast.querySelectorAll('b').length,0);
