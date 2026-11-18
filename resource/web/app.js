@@ -92,10 +92,10 @@ function render(){
  renderedTab=tab;renderedGang=Boolean(state.gang);
 }
 $('close').onclick=()=>post('close');$('inventoryClose').onclick=()=>post('close');document.addEventListener('keydown',e=>{if(e.key==='Escape'||(e.key==='Tab'&&uiMode==='inventory'&&!e.repeat)){e.preventDefault?.();post('close');}if((e.key==='r'||e.key==='R')&&gridSelection&&document.activeElement?.tagName!=='INPUT'){e.preventDefault();rotateGridSelection();}});
-window.addEventListener('message',e=>{const m=e.data;if(m.type==='open'){$('hud').hidden=m.value;if(!m.value){gridDragging=false;gridSelection=null;}if(m.value){uiMode=m.mode==='inventory'?'inventory':'menu';tab=uiMode==='inventory'?'inventory':menuTab;}
+window.addEventListener('message',e=>{const m=e.data;if(m.type==='open'){$('hud').hidden=m.value;if(!m.value){gridPointer=null;gridDragging=false;gridSelection=null;}if(m.value){uiMode=m.mode==='inventory'?'inventory':'menu';tab=uiMode==='inventory'?'inventory':menuTab;}
 $('menu').hidden=!m.value||uiMode!=='menu';$('inventoryWindow').hidden=!m.value||uiMode!=='inventory';render();}if(m.type==='notice')notice(m.text);if(m.type==='state'){state=m.value;config=m.config;if(!gridDragging)render();}});
 // Tetris inventory. The server owns placements; the browser only previews requests.
-let gridSelection=null,gridDragging=false,gridGrab={x:0,y:0};
+let gridSelection=null,gridDragging=false,gridGrab={x:0,y:0},gridPointer=null,gridTarget=null;
 function inventoryIcon(item){
  const paths={
   cash:'M5 16h54v32H5z M12 22h40v20H12z M32 24a8 8 0 1 0 0 16a8 8 0 1 0 0-16',
@@ -122,11 +122,16 @@ function selectGridEntry(entry,source,revision){
  gridSelection={...entry,source,revision};render();
 }
 function renderGridInventory(p,inv){
+ gridTarget=null;
  const catalog=inv.catalog||{};const grid=inv.grid;
  if(gridSelection){const source=gridSelection.source;let valid;
   if(source==='carried')valid=grid.entries.find(e=>e.id===gridSelection.id&&e.item===gridSelection.item);
   else {const d=state.drops.find(d=>d.id===source&&d.canOpen);valid=d&&((gridSelection.item==='cash'?d.cash:d.items?.[gridSelection.item])>=gridSelection.amount);}
   if(!valid)gridSelection=null;
+  else if(!gridDragging){
+   gridSelection.revision=grid.revision;
+   if(source==='carried')gridSelection.amount=valid.amount;
+  }
  }
  const layout=el('div',undefined,'tetrisLayout');$('content').append(layout);
  const ground=el('article',undefined,'tetrisPanel');layout.append(ground);
@@ -140,14 +145,24 @@ function renderGridInventory(p,inv){
   const icon=inventoryIcon(e.item);if(e.rotated)icon.style.transform='rotate(90deg)';
   tile.append(icon,el('span',label,'gridItemName'),el('b',e.item==='cash'?'$'+e.amount:e.amount>1?String(e.amount):'','gridQuantity'));
   if(gridSelection?.id===e.id&&gridSelection.source===source)tile.classList.add('selected');
-  tile.onclick=()=>selectGridEntry(e,source,revision);
-  tile.ondragstart=event=>{
+  tile.draggable=false;
+  tile.onpointerdown=event=>{
+   if(event.button!==0)return;event.preventDefault();
    const selected=gridSelection?.id===e.id&&gridSelection.source===source?gridSelection:{...e,source,revision};
    const rect=tile.getBoundingClientRect();
    gridGrab=selected.rotated===e.rotated?{x:Math.max(0,Math.min(e.w-1,Math.floor((event.clientX-rect.left)/rect.width*e.w))),y:Math.max(0,Math.min(e.h-1,Math.floor((event.clientY-rect.top)/rect.height*e.h)))}:{x:0,y:0};
-   gridDragging=true;gridSelection=selected;event.dataTransfer.setData('text/plain',e.id);event.dataTransfer.effectAllowed='move';
+   gridSelection=selected;gridDragging=true;gridPointer={id:event.pointerId,x:event.clientX,y:event.clientY,moved:false,tile};
+   tile.setPointerCapture?.(event.pointerId);
   };
-  tile.ondragend=()=>{gridDragging=false;gridGrab={x:0,y:0};render();};
+  tile.onpointermove=event=>{
+   if(!gridPointer||event.pointerId!==gridPointer.id)return;
+   if(Math.hypot(event.clientX-gridPointer.x,event.clientY-gridPointer.y)>4)gridPointer.moved=true;
+   gridPointer.last=event;if(gridPointer.moved)gridTarget?.preview(event);
+  };
+  tile.onpointerup=finishGridPointer;
+  tile.onpointercancel=()=>cancelGridPointer();
+  tile.onlostpointercapture=()=>{if(gridPointer?.tile===tile)cancelGridPointer();};
+  tile.onclick=event=>{if(event.detail===0)selectGridEntry(e,source,revision);};
   return tile;
  }
  function buildGrid(panel,cols,rows,entries,source,revision){
@@ -169,7 +184,7 @@ function renderGridInventory(p,inv){
   function place(event){const at=preview(event);if(!at)return;if(gridSelection.source==='carried')act('inventoryMove',{entry:gridSelection.id,x:at.x,y:at.y,rotated:gridSelection.rotated,revision:gridSelection.revision});else act('loot',{drop:gridSelection.source,item:gridSelection.item,amount:gridSelection.amount,x:at.x,y:at.y,rotated:gridSelection.rotated,revision:gridSelection.revision});gridSelection=null;ghost.hidden=true;}
   board.onpointermove=preview;board.onpointerleave=()=>{ghost.hidden=true;};
   board.ondragover=event=>{event.preventDefault();preview(event);};board.ondrop=event=>{event.preventDefault();place(event);};
-  board.onclick=event=>{if(event.target.classList?.contains('gridCell'))place(event);};
+  gridTarget={preview,place,ghost};
  }
  title(ground,L.nearbyLoot,L.gridTransferHint);
  const nearby=state.drops.filter(d=>d.canOpen);
@@ -214,5 +229,21 @@ function renderGridInventory(p,inv){
  }else equipment.append(el('p',L.selectItem));
  button(equipment,L.respawn,()=>act('respawn'));button(equipment,L.surrender,()=>act('surrender'));
 }
-function rotateGridSelection(){if(!gridSelection)return;const e=gridSelection;e.rotated=1-e.rotated;[e.w,e.h]=[e.h,e.w];render();}
+function rotateGridSelection(){if(!gridSelection)return;const e=gridSelection;e.rotated=1-e.rotated;[e.w,e.h]=[e.h,e.w];gridGrab={x:0,y:0};if(gridDragging){if(gridPointer?.last)gridTarget?.preview(gridPointer.last);}else render();}
 
+
+function finishGridPointer(event){
+ if(!gridPointer||event.pointerId!==gridPointer.id)return;
+ const pointer=gridPointer;
+ if(pointer.moved)gridTarget?.place(event);
+ gridPointer=null;gridDragging=false;gridGrab={x:0,y:0};
+ if(pointer.tile.hasPointerCapture?.(pointer.id))pointer.tile.releasePointerCapture(pointer.id);
+ render();
+}
+function cancelGridPointer(){
+ const pointer=gridPointer;gridPointer=null;gridDragging=false;gridGrab={x:0,y:0};
+ if(pointer?.tile.hasPointerCapture?.(pointer.id))pointer.tile.releasePointerCapture(pointer.id);
+ if(state)render();
+}
+window.addEventListener('pointerup',finishGridPointer);
+window.addEventListener('blur',cancelGridPointer);

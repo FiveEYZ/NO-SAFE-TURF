@@ -1,7 +1,7 @@
 // English is the default interface language.
 window.L = {
  inventoryTitle:'Inventory',inventoryHelp:'TAB / ESC · Close     R · Rotate selected item     Drag · Move or transfer',
- gridTransferHint:'SELECT TO TRANSFER',gridInstructions:'Drag an item, or select it and click a cell. R rotates before placement.',
+ gridTransferHint:'SELECT TO TRANSFER',gridInstructions:'Hold the left mouse button, drag, then release to place. R rotates.',
  gridEquipmentHint:'ACTIVE LOADOUT',gridOverflow:'OVERFLOW — unload or rearrange. No items were deleted.',
  equipment:'Equipment',rotate:'Rotate · R',holster:'Holster',selectItem:'Select an item to inspect, rotate or transfer it.',baseValue:'Base sale value',
 
